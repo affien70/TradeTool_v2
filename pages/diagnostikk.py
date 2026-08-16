@@ -10,6 +10,7 @@ from tradetool.diagnostics.coverage import build_coverage_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
 from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
 from tradetool.diagnostics.trade_policy import build_trade_policy_diagnostics
+from tradetool.diagnostics.trade_policy_sanity import build_trade_policy_sanity_report
 
 
 def _render_distribution_table(distribution: dict[str, int]) -> None:
@@ -165,6 +166,36 @@ def render() -> None:
                     'policy_warnings': ', '.join(row.policy_warnings),
                 }
                 for row in result.rows[:20]
+            ],
+            use_container_width=True,
+        )
+
+    if st.button('Kjør trade-policy sanity'):
+        if not database_path.strip():
+            st.warning('Oppgi en lokal databasebane for å kjøre trade-policy-sanity.')
+            return
+        try:
+            result = build_trade_policy_sanity_report(
+                db_path=Path(database_path.strip()),
+                universe_id=universe_id.strip() or 'UNSPECIFIED',
+                benchmark_ticker=benchmark_ticker.strip() or None,
+                price_table=price_table.strip() or 'price_history',
+            )
+        except Exception as exc:  # pragma: no cover
+            st.error(str(exc))
+            return
+        st.subheader('Trade-policy sanity')
+        st.caption('Dette er bare en audit av trade-policy-diagnostikk, ikke kjøpsråd eller produksjonsgodkjenning.')
+        st.json(result.to_summary_dict())
+        st.dataframe(
+            [
+                {
+                    'raw_rank': row.raw_rank,
+                    'ticker': row.ticker,
+                    'trade_signal': row.trade_signal.value,
+                    'not_buy_explanation': '' if row.trade_signal.value == 'BUY' else ', '.join(row.policy_reasons),
+                }
+                for row in result.policy.rows[:20]
             ],
             use_container_width=True,
         )

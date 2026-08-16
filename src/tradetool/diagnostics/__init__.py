@@ -15,6 +15,11 @@ from tradetool.diagnostics.trade_policy import (
     build_trade_policy_diagnostics,
     write_trade_policy_outputs,
 )
+from tradetool.diagnostics.trade_policy_sanity import (
+    TradePolicySanityResult,
+    build_trade_policy_sanity_report,
+    write_trade_policy_sanity_outputs,
+)
 
 __all__ = [
     'BaselineRankingDiagnosticsResult',
@@ -23,12 +28,15 @@ __all__ = [
     'EligibilityDiagnosticsResult',
     'FeatureReadinessDiagnosticsResult',
     'TradePolicyDiagnosticsResult',
+    'TradePolicySanityResult',
     'build_baseline_ranking_diagnostics',
     'build_baseline_sanity_diagnostics',
     'build_coverage_diagnostics',
     'build_eligibility_diagnostics',
     'build_feature_readiness_diagnostics',
     'build_trade_policy_diagnostics',
+    'build_trade_policy_sanity_report',
     'write_trade_policy_outputs',
+    'write_trade_policy_sanity_outputs',
     'write_baseline_sanity_outputs',
 ]
