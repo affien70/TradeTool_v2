@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 
 from tradetool.diagnostics.baseline_ranking import build_baseline_ranking_diagnostics
+from tradetool.diagnostics.baseline_sanity import build_baseline_sanity_diagnostics
 from tradetool.diagnostics.coverage import build_coverage_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
 from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
@@ -24,6 +25,7 @@ def render() -> None:
     database_path = st.text_input('Lokal kopi av SQLite-database', value='', placeholder='/tmp/portfolio_copy.sqlite')
     universe_id = st.text_input('Universe ID', value='NORWAY_V2')
     benchmark_ticker = st.text_input('Benchmark ticker (valgfritt)', value='^OSEAX')
+    evidence_dir = st.text_input('Phase 1 evidence-dir (valgfritt)', value='evidence/v1_baseline/20260622T200335Z')
     price_table = st.text_input('Pris-tabell (valgfritt)', value='')
 
     if st.button('Inspiser skjemadekning'):
@@ -113,6 +115,26 @@ def render() -> None:
         st.caption('Dette er bare diagnostisk baseline-ranking for senere sammenligning, ikke kjøpsråd eller produksjonspolicy.')
         st.json(result.to_summary_dict())
         st.dataframe([row.to_dict() for row in result.rows[:20]], use_container_width=True)
+
+    if st.button('Kjør baseline sanity'):
+        if not database_path.strip():
+            st.warning('Oppgi en lokal databasebane for å kjøre baseline-sanity-diagnostikk.')
+            return
+        try:
+            result = build_baseline_sanity_diagnostics(
+                db_path=Path(database_path.strip()),
+                universe_id=universe_id.strip() or 'UNSPECIFIED',
+                benchmark_ticker=benchmark_ticker.strip() or None,
+                evidence_dir=Path(evidence_dir.strip() or 'evidence/v1_baseline/20260622T200335Z'),
+                price_table=price_table.strip() or 'price_history',
+            )
+        except Exception as exc:  # pragma: no cover
+            st.error(str(exc))
+            return
+        st.subheader('Baseline sanity')
+        st.caption('Dette er bare en sanity-rapport for diagnostisk baseline-ranking, ikke kjøpsråd eller produksjonsgodkjenning.')
+        st.json(result.to_summary_dict())
+        st.dataframe([row.to_dict() for row in result.top20_rows], use_container_width=True)
 
 
 render()
