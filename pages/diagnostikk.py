@@ -9,6 +9,7 @@ from tradetool.diagnostics.baseline_sanity import build_baseline_sanity_diagnost
 from tradetool.diagnostics.coverage import build_coverage_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
 from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
+from tradetool.diagnostics.trade_policy import build_trade_policy_diagnostics
 
 
 def _render_distribution_table(distribution: dict[str, int]) -> None:
@@ -135,6 +136,38 @@ def render() -> None:
         st.caption('Dette er bare en sanity-rapport for diagnostisk baseline-ranking, ikke kjøpsråd eller produksjonsgodkjenning.')
         st.json(result.to_summary_dict())
         st.dataframe([row.to_dict() for row in result.top20_rows], use_container_width=True)
+
+    if st.button('Kjør trade-policy diagnostikk'):
+        if not database_path.strip():
+            st.warning('Oppgi en lokal databasebane for å kjøre trade-policy-diagnostikk.')
+            return
+        try:
+            result = build_trade_policy_diagnostics(
+                db_path=Path(database_path.strip()),
+                universe_id=universe_id.strip() or 'UNSPECIFIED',
+                benchmark_ticker=benchmark_ticker.strip() or None,
+                price_table=price_table.strip() or 'price_history',
+            )
+        except Exception as exc:  # pragma: no cover
+            st.error(str(exc))
+            return
+        st.subheader('Trade-policy diagnostikk')
+        st.caption('Dette er bare en praktisk diagnostisk overlay over baseline-ranking, ikke kjøpsråd eller produksjonsgodkjenning.')
+        st.json(result.to_summary_dict())
+        st.dataframe(
+            [
+                {
+                    'raw_rank': row.raw_rank,
+                    'ticker': row.ticker,
+                    'raw_score': row.raw_score,
+                    'trade_signal': row.trade_signal.value,
+                    'policy_reasons': ', '.join(row.policy_reasons),
+                    'policy_warnings': ', '.join(row.policy_warnings),
+                }
+                for row in result.rows[:20]
+            ],
+            use_container_width=True,
+        )
 
 
 render()
