@@ -1,1 +1,11 @@
-"""Feature construction is intentionally unimplemented in Phase 2."""
+from tradetool.features.raw import (
+    FeatureComputationResult,
+    compute_feature_readiness,
+    compute_raw_features,
+)
+
+__all__ = [
+    'FeatureComputationResult',
+    'compute_feature_readiness',
+    'compute_raw_features',
+]

@@ -6,6 +6,7 @@ import streamlit as st
 
 from tradetool.diagnostics.coverage import build_coverage_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
+from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
 
 
 def _render_distribution_table(distribution: dict[str, int]) -> None:
@@ -21,6 +22,7 @@ def render() -> None:
 
     database_path = st.text_input('Lokal kopi av SQLite-database', value='', placeholder='/tmp/portfolio_copy.sqlite')
     universe_id = st.text_input('Universe ID', value='NORWAY_V2')
+    benchmark_ticker = st.text_input('Benchmark ticker (valgfritt)', value='^OSEAX')
     price_table = st.text_input('Pris-tabell (valgfritt)', value='')
 
     if st.button('Inspiser skjemadekning'):
@@ -63,6 +65,30 @@ def render() -> None:
         st.json(result.to_summary_dict())
         st.dataframe(
             [{'reason': key, 'count': value} for key, value in sorted(result.rejection_counts_by_reason.items())],
+            use_container_width=True,
+        )
+
+    if st.button('Kjør feature readiness'):
+        if not database_path.strip():
+            st.warning('Oppgi en lokal databasebane for å kjøre feature-readiness-diagnostikk.')
+            return
+
+        try:
+            result = build_feature_readiness_diagnostics(
+                db_path=Path(database_path.strip()),
+                universe_id=universe_id.strip() or 'UNSPECIFIED',
+                benchmark_ticker=benchmark_ticker.strip() or None,
+                price_table=price_table.strip() or 'price_history',
+            )
+        except Exception as exc:  # pragma: no cover - surfaced in UI only
+            st.error(str(exc))
+            return
+
+        st.subheader('Feature readiness')
+        st.caption('Dette er bare rå feature readiness for fremtidig rangering, ikke ranking, trade signal eller kjøpsliste.')
+        st.json(result.to_summary_dict())
+        st.dataframe(
+            [{'reason': key, 'count': value} for key, value in sorted(result.feature_missing_reason_counts.items())],
             use_container_width=True,
         )
 
