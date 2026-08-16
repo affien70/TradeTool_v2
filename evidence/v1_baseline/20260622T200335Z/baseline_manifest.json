@@ -1,0 +1,42 @@
+{
+  "generated_at_utc": "2026-06-22T20:03:35Z",
+  "report_directory": "/Users/affien/DEV/TradeTool/reports/v2_phase1_baseline/20260622T200335Z",
+  "db_original_pre": {
+    "path": "/Users/affien/DEV/TradeTool/portfolio.sqlite",
+    "sha256": "fbb3173870a0a9e2026cc8661b61a3f33537811b2e69d71928739b1c3c2c47fe",
+    "size": 292864000,
+    "mtime_ns": 1782067441201824246
+  },
+  "db_original_post": {
+    "path": "/Users/affien/DEV/TradeTool/portfolio.sqlite",
+    "sha256": "fbb3173870a0a9e2026cc8661b61a3f33537811b2e69d71928739b1c3c2c47fe",
+    "size": 292864000,
+    "mtime_ns": 1782067441201824246
+  },
+  "db_copy_path": "/private/tmp/tradetool_v2_phase1_20260622T200335Z/portfolio.sqlite",
+  "method_effective_dates": {
+    "ose": "2026-06-19",
+    "sp500": "2026-06-09"
+  },
+  "methods_captured": {
+    "ose": [
+      "main_momentum",
+      "current_ml_runtime",
+      "raw_ml",
+      "parked_practical_first"
+    ],
+    "sp500": [
+      "main_momentum",
+      "current_ml_runtime",
+      "raw_ml",
+      "parked_practical_first"
+    ]
+  },
+  "export_capture_dirs": {
+    "ose_current": "reports/v2_phase1_baseline/20260622T200335Z/2026-06-19_20260622T200615Z",
+    "ose_parked": "reports/v2_phase1_baseline/20260622T200335Z/2026-06-19_20260622T200641Z",
+    "sp500_current": "reports/v2_phase1_baseline/20260622T200335Z/2026-06-09_20260622T200808Z",
+    "sp500_parked": "reports/v2_phase1_baseline/20260622T200335Z/2026-06-09_20260622T200826Z"
+  },
+  "artifact_integrity_stable": true
+}

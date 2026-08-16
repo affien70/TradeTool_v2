@@ -1,0 +1,17 @@
+[build-system]
+requires = ['setuptools>=68', 'wheel']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'tradetool-v2'
+version = '0.1.0'
+description = 'Standalone Phase 2 foundation for TradeTool v2'
+readme = 'README.md'
+requires-python = '>=3.12'
+dependencies = []
+
+[tool.setuptools]
+package-dir = {'' = 'src'}
+
+[tool.setuptools.packages.find]
+where = ['src']

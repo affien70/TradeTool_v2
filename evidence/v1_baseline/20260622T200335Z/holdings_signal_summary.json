@@ -1,0 +1,24 @@
+{
+  "total_active_position_count": 7,
+  "signal_counts": {
+    "HOLD": 6,
+    "SELL": 1
+  },
+  "cost_basis_counts": {
+    "Kjent kostpris": 7
+  },
+  "source_functions_modules": [
+    "holdings_service.load_holdings",
+    "analytics.build_holdings_rules_from_settings",
+    "analytics.holdings_signals",
+    "holdings_view.render_holdings_tab",
+    "daily_holdings_report.execute_daily_report"
+  ],
+  "shared_authoritative_signal_path_confirmed": true,
+  "shared_signal_evidence": [
+    "holdings_view imports and calls analytics.holdings_signals",
+    "daily_holdings_report imports and calls analytics.holdings_signals",
+    "email report payload is built from daily_holdings_report merged holdings/signals output"
+  ],
+  "failed_signal_rows": 0
+}

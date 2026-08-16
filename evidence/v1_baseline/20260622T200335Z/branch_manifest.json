@@ -1,0 +1,34 @@
+[
+  {
+    "ref_name": "main",
+    "commit_hash": "68dbc8301eadf3ac9fe17ef0588ac02405ac0af6",
+    "commit_subject": "Refactor av screener logikk.",
+    "commit_date": "2026-04-19T22:49:05+02:00",
+    "relationship_to_production_v2": "old momentum baseline",
+    "approval_state": "baseline-only"
+  },
+  {
+    "ref_name": "origin/ML_SCREENER",
+    "commit_hash": "f35517ea3e05a84848290e8b32bb1189861f5de5",
+    "commit_subject": "Add practical ML screener ranking",
+    "commit_date": "2026-06-16T08:01:27+02:00",
+    "relationship_to_production_v2": "current approved ML runtime baseline",
+    "approval_state": "approved"
+  },
+  {
+    "ref_name": "wip/ml-practical-first-a07a27a",
+    "commit_hash": "a07a27afdb666f11b8836b931cab15a9a9a346dc",
+    "commit_subject": "Fix live practical screener gate invariant",
+    "commit_date": "2026-06-18T22:33:41+02:00",
+    "relationship_to_production_v2": "historical practical-first package",
+    "approval_state": "parked"
+  },
+  {
+    "ref_name": "v2/specification",
+    "commit_hash": "f73c68ad1440c6a43bf517375183045ba92d36c7",
+    "commit_subject": "Add TradeTool v2 specification",
+    "commit_date": "2026-06-22T21:53:39+02:00",
+    "relationship_to_production_v2": "documentation-only v2 specification",
+    "approval_state": "approved-specification"
+  }
+]

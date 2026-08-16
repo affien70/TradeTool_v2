@@ -1,0 +1,85 @@
+{
+  "ose": {
+    "universe": "NORWAY_V2",
+    "benchmark": "^OSEAX",
+    "effective_score_date": "2026-06-19",
+    "input_universe_count": 293,
+    "normalized_valid_ticker_count": 293,
+    "market_data_coverage_count": 293,
+    "enough_history_count": 281,
+    "feature_complete_count": 281,
+    "eligible_count": 89,
+    "ranked_count": 281,
+    "failed_count": 12,
+    "failure_counts_by_reason": {
+      "incomplete trained feature set": 12
+    },
+    "latest_data_date_distribution": {
+      "2026-06-19": 293
+    },
+    "benchmark_coverage": {
+      "benchmark": "^OSEAX",
+      "latest_price_date": "2026-06-19",
+      "rows_present": 293
+    },
+    "duplicate_ticker_count": 0,
+    "missing_ticker_samples": [],
+    "main_momentum": {
+      "effective_score_date": "2026-06-19",
+      "ranked_count": 240,
+      "filter_counts": {
+        "Under SMA200": 111,
+        "SMA-dist >= 80%": 2,
+        "1m <= 0": 162,
+        "3m under min rule": 130,
+        "DD <= -80%": 59,
+        "Volatilitet > 2x benchmark": 147,
+        "RS <= 1.05": 186,
+        "Svak RS-trend": 106,
+        "Close < 5": 43
+      },
+      "info_rows_present": true
+    }
+  },
+  "sp500": {
+    "universe": "SP500",
+    "benchmark": "^GSPC",
+    "effective_score_date": "2026-06-09",
+    "input_universe_count": 503,
+    "normalized_valid_ticker_count": 503,
+    "market_data_coverage_count": 503,
+    "enough_history_count": 502,
+    "feature_complete_count": 502,
+    "eligible_count": 151,
+    "ranked_count": 502,
+    "failed_count": 1,
+    "failure_counts_by_reason": {
+      "incomplete trained feature set": 1
+    },
+    "latest_data_date_distribution": {
+      "2026-06-09": 503
+    },
+    "benchmark_coverage": {
+      "benchmark": "^GSPC",
+      "latest_price_date": "2026-06-09",
+      "rows_present": 503
+    },
+    "duplicate_ticker_count": 0,
+    "missing_ticker_samples": [],
+    "main_momentum": {
+      "effective_score_date": "2026-06-09",
+      "ranked_count": 240,
+      "filter_counts": {
+        "Under SMA200": 18,
+        "SMA-dist >= 80%": 6,
+        "1m <= 0": 30,
+        "3m under min rule": 47,
+        "DD <= -80%": 2,
+        "Volatilitet > 2x benchmark": 144,
+        "RS <= 1.05": 104,
+        "Svak RS-trend": 55
+      },
+      "info_rows_present": true
+    }
+  }
+}

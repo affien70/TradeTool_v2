@@ -1,0 +1,407 @@
+[
+  {
+    "run_directory": "ml_runs/OSE_LGBM_RS_SMA_V2_FIX",
+    "run_id": "OSE_LGBM_RS_SMA_V2_FIX",
+    "model_family": "lightgbm",
+    "target": "label_outperform_60d",
+    "training_date_range": {
+      "start": "2016-04-22",
+      "end": "2026-02-06"
+    },
+    "validation_oof_date_range": {
+      "start": "2017-04-21",
+      "end": "2025-12-08"
+    },
+    "training_row_count": 388127,
+    "oof_row_count": 349236,
+    "ticker_count": 197,
+    "universe_definition": "",
+    "benchmark": "",
+    "feature_contract_or_feature_list": "feature_columns:31",
+    "artifact_files": [
+      {
+        "file": "metadata.json",
+        "sha256": "e4ab3f208382816a003b309d6820159b16acd862ad3a90335f7c581bddceaf2a",
+        "size": 698,
+        "mtime_ns": 1778254026326512440
+      },
+      {
+        "file": "feature_columns.json",
+        "sha256": "4a027e41ed9876f66a0b3ecd4c2ec843b00e46ecf253821b82c4e996f06d09e4",
+        "size": 539,
+        "mtime_ns": 1778254026326613191
+      },
+      {
+        "file": "model.joblib",
+        "sha256": "814e6d7f96bb840ddd6f7fb5a331546e2ea79e3b7b4c7bcaa8a49550254f8891",
+        "size": 711486,
+        "mtime_ns": 1778254026326284480
+      },
+      {
+        "file": "ranking_evaluation.json",
+        "sha256": "f88347994d89df0eb96de2917b7a687fad74fb64212e83793190125a67d4b634",
+        "size": 855,
+        "mtime_ns": 1778254026735635237
+      },
+      {
+        "file": "oof_predictions.parquet",
+        "sha256": "987cc7023278ed98a175c3f6e9cae7d5e038e34d9d304e7c74e58a4256708406",
+        "size": 6293752,
+        "mtime_ns": 1778254026405088351
+      },
+      {
+        "file": "fold_metrics.parquet",
+        "sha256": "efb6e21354ab265f7dac04f1256b5aac7ad528224ae8fca20817616f11ec3473",
+        "size": 10861,
+        "mtime_ns": 1778254026356618703
+      },
+      {
+        "file": "scored_snapshot.parquet",
+        "sha256": "8147c1545a5730f3ccd6ebd0b37df41fc89a8583fc572743aac9b1ec1bdc46e5",
+        "size": 24986773,
+        "mtime_ns": 1778254026729171606
+      }
+    ],
+    "creation_timestamp": "2026-05-08T15:27:05Z",
+    "promotion_or_production_status": "approved_production_ose",
+    "has_2026_training_rows": true,
+    "has_explicit_2026_validation_evidence": false,
+    "missing_metadata": [
+      "provenance.json",
+      "benchmark_ticker"
+    ]
+  },
+  {
+    "run_directory": "ml_runs/OSE_LGBM_RS_SMA_V2_FULL225_REPRO_20260605",
+    "run_id": "OSE_LGBM_RS_SMA_V2_FULL225_REPRO_20260605",
+    "model_family": "lightgbm",
+    "target": "label_outperform_60d",
+    "training_date_range": {
+      "start": "2016-04-22",
+      "end": "2026-03-04"
+    },
+    "validation_oof_date_range": {
+      "start": "2017-04-21",
+      "end": "2025-12-08"
+    },
+    "training_row_count": 438080,
+    "oof_row_count": 391956,
+    "ticker_count": 225,
+    "universe_definition": "",
+    "benchmark": "^OSEAX",
+    "feature_contract_or_feature_list": "ml_features.v2",
+    "artifact_files": [
+      {
+        "file": "metadata.json",
+        "sha256": "311b1b6c59feb3f9224666f5b1e874c50c06d9247c06e7a8d0f86d903508d3e1",
+        "size": 1105,
+        "mtime_ns": 1780861028449942617
+      },
+      {
+        "file": "feature_columns.json",
+        "sha256": "1c51926f69d18359e0a0eb9b5f65c70cffe3c664c98f5a6130581c846c5d0bd6",
+        "size": 561,
+        "mtime_ns": 1780861028450132743
+      },
+      {
+        "file": "model.joblib",
+        "sha256": "cfd21d5d837e3c1ebdbe8b5c7559a724e3b9deef913ae9ee7d9db6dbae258ae7",
+        "size": 711502,
+        "mtime_ns": 1780861028449263070
+      },
+      {
+        "file": "ranking_evaluation.json",
+        "sha256": "e260961036fec084e97fcf3473250596757c83963389f57002c9bade129ad9ab",
+        "size": 854,
+        "mtime_ns": 1780861031593501346
+      },
+      {
+        "file": "oof_predictions.parquet",
+        "sha256": "0a1466412cc436d79ef0c4ac619b405b37df4dadc1e185fdaeaecb87c6f6e930",
+        "size": 6357069,
+        "mtime_ns": 1780861028703706298
+      },
+      {
+        "file": "fold_metrics.parquet",
+        "sha256": "c4c76e4bd45e093a9e7e7de2a326f57c579812be4e024e2b3a69a129c7ea5f13",
+        "size": 11003,
+        "mtime_ns": 1780861028452894971
+      },
+      {
+        "file": "scored_snapshot.parquet",
+        "sha256": "90fa017b925b3c87ec078c0e158754f536aeaaf3f06b4b5881e6bf55ca12fa4f",
+        "size": 25398149,
+        "mtime_ns": 1780861031591025912
+      },
+      {
+        "file": "raw_input_snapshot.parquet",
+        "sha256": "e89e2129f75f3a40da0e936f3c11d29c0440d74776e5fda3ac5e776497c45add",
+        "size": 6244170,
+        "mtime_ns": 1780861029139344118
+      },
+      {
+        "file": "provenance.json",
+        "sha256": "d68cc05bdf451d1ddf47d31801da20c86f92823b39a9738787740f5368f4bfc4",
+        "size": 6840,
+        "mtime_ns": 1780861031593829432
+      },
+      {
+        "file": "artifact_checksums.json",
+        "sha256": "ef1da3f1cdf1a06e2e755ad08f52a4564054a2be71dd6aa08a4257933c907bac",
+        "size": 943,
+        "mtime_ns": 1780861031623810557
+      }
+    ],
+    "creation_timestamp": "2026-06-07T19:37:07Z",
+    "promotion_or_production_status": "approved_reproducible_challenger_ose",
+    "has_2026_training_rows": true,
+    "has_explicit_2026_validation_evidence": false,
+    "missing_metadata": []
+  },
+  {
+    "run_directory": "ml_runs/OSE_LGBM_RS_SMA_V2_FULL293_REPRO_20260605",
+    "run_id": "OSE_LGBM_RS_SMA_V2_FULL293_REPRO_20260605",
+    "model_family": "lightgbm",
+    "target": "label_outperform_60d",
+    "training_date_range": {
+      "start": "2016-04-22",
+      "end": "2026-03-05"
+    },
+    "validation_oof_date_range": {
+      "start": "2017-04-21",
+      "end": "2025-12-08"
+    },
+    "training_row_count": 523028,
+    "oof_row_count": 471190,
+    "ticker_count": 286,
+    "universe_definition": "NORWAY_V2",
+    "benchmark": "^OSEAX",
+    "feature_contract_or_feature_list": "ml_features.v2",
+    "artifact_files": [
+      {
+        "file": "metadata.json",
+        "sha256": "fde799ad997942de35033ab8c0ecf75d4903f1234b5b51080f8d270605cd99f9",
+        "size": 1105,
+        "mtime_ns": 1781028604103235517
+      },
+      {
+        "file": "feature_columns.json",
+        "sha256": "1c51926f69d18359e0a0eb9b5f65c70cffe3c664c98f5a6130581c846c5d0bd6",
+        "size": 561,
+        "mtime_ns": 1781028604103400059
+      },
+      {
+        "file": "model.joblib",
+        "sha256": "c864013800ba4b317a3d2f63282a15b95e3fdd664fb1d3bf698506f157852193",
+        "size": 712062,
+        "mtime_ns": 1781028604102884016
+      },
+      {
+        "file": "ranking_evaluation.json",
+        "sha256": "8bcd7429333955ff7f132a49148ec2402290fa2381a61a7bbed1e00bd6117e97",
+        "size": 851,
+        "mtime_ns": 1781028607780224520
+      },
+      {
+        "file": "oof_predictions.parquet",
+        "sha256": "0e840db953af761cacc860a07945975e90aaad3e9466929e14fd12dbc04a4e05",
+        "size": 7557937,
+        "mtime_ns": 1781028604392914855
+      },
+      {
+        "file": "fold_metrics.parquet",
+        "sha256": "de2ca84fee00a00287ddcb73216969ca19272e5d7754524ce1cefabdd81bb6f1",
+        "size": 11007,
+        "mtime_ns": 1781028604105919814
+      },
+      {
+        "file": "scored_snapshot.parquet",
+        "sha256": "3ea51a49e2687bb9c161a7c39089064242f6ebc3b6da06e600c07867ed124310",
+        "size": 29874383,
+        "mtime_ns": 1781028607777537848
+      },
+      {
+        "file": "raw_input_snapshot.parquet",
+        "sha256": "bb2a21fc6c3d176e9a910cb524a48e45a1e81bb42fd91ce400624c3c2d63914f",
+        "size": 7635234,
+        "mtime_ns": 1781028604894080789
+      },
+      {
+        "file": "provenance.json",
+        "sha256": "62a15f4ffebf2a79da5bef6277dc3e1e6f8f992d9233eea311eb480a1ff5f910",
+        "size": 8352,
+        "mtime_ns": 1781028607780586063
+      },
+      {
+        "file": "artifact_checksums.json",
+        "sha256": "bfdb7f2db7910b838646fb52f260d55bad778d9a78864471e81380c35390ac58",
+        "size": 943,
+        "mtime_ns": 1781028607813979797
+      }
+    ],
+    "creation_timestamp": "2026-06-09T18:10:02Z",
+    "promotion_or_production_status": "candidate_repro_snapshot_ose",
+    "has_2026_training_rows": true,
+    "has_explicit_2026_validation_evidence": false,
+    "missing_metadata": []
+  },
+  {
+    "run_directory": "ml_runs/SP500_LGBM_RS_SMA_V1",
+    "run_id": "SP500_LGBM_RS_SMA_V1",
+    "model_family": "lightgbm",
+    "target": "label_outperform_60d",
+    "training_date_range": {
+      "start": "2016-04-25",
+      "end": "2026-01-28"
+    },
+    "validation_oof_date_range": {
+      "start": "2017-04-25",
+      "end": "2025-10-29"
+    },
+    "training_row_count": 1198383,
+    "oof_row_count": 1049241,
+    "ticker_count": 502,
+    "universe_definition": "",
+    "benchmark": "",
+    "feature_contract_or_feature_list": "feature_columns:31",
+    "artifact_files": [
+      {
+        "file": "metadata.json",
+        "sha256": "14c970a3641ad4977b45af5b059253d8c4097958a25201a9dcb8b3a5ecbeb297",
+        "size": 698,
+        "mtime_ns": 1779139511253363568
+      },
+      {
+        "file": "feature_columns.json",
+        "sha256": "4a027e41ed9876f66a0b3ecd4c2ec843b00e46ecf253821b82c4e996f06d09e4",
+        "size": 539,
+        "mtime_ns": 1779139511253472153
+      },
+      {
+        "file": "model.joblib",
+        "sha256": "71240d9e2a13b85ba704a3159051c08f14c07f1234a8d3546974f595e9d9f0b0",
+        "size": 718510,
+        "mtime_ns": 1779139511253094482
+      },
+      {
+        "file": "ranking_evaluation.json",
+        "sha256": "fb761f6366c5da66f133164631ebc13357b307d38241de48f0fc77527e2eb39a",
+        "size": 851,
+        "mtime_ns": 1779139512530301525
+      },
+      {
+        "file": "oof_predictions.parquet",
+        "sha256": "1a04566a02edbcc7d9b67e688924fb7f4d74a3f535e44fd04082c311b38e19a7",
+        "size": 18001987,
+        "mtime_ns": 1779139511400162381
+      },
+      {
+        "file": "fold_metrics.parquet",
+        "sha256": "ffaabfcaffc6294f0cbc78ba4e9c563f83e9cf917d5a74fd816db18cd83e3d11",
+        "size": 10845,
+        "mtime_ns": 1779139511287077479
+      },
+      {
+        "file": "scored_snapshot.parquet",
+        "sha256": "f6c6c184e59d4ba2ea3664113febf03b61bcf0f295c27012d8b8766fdcfd0a9d",
+        "size": 72894968,
+        "mtime_ns": 1779139512524501879
+      }
+    ],
+    "creation_timestamp": "2026-05-18T21:25:09Z",
+    "promotion_or_production_status": "approved_runtime_sp500",
+    "has_2026_training_rows": true,
+    "has_explicit_2026_validation_evidence": false,
+    "missing_metadata": [
+      "provenance.json",
+      "benchmark_ticker"
+    ]
+  },
+  {
+    "run_directory": "ml_runs/SP500_LGBM_RS_SMA_V2_FULL503_REPRO_20260522",
+    "run_id": "SP500_LGBM_RS_SMA_V2_FULL503_REPRO_20260522",
+    "model_family": "lightgbm",
+    "target": "label_outperform_60d",
+    "training_date_range": {
+      "start": "2016-04-25",
+      "end": "2026-02-26"
+    },
+    "validation_oof_date_range": {
+      "start": "2017-04-25",
+      "end": "2026-01-30"
+    },
+    "training_row_count": 1210770,
+    "oof_row_count": 1083071,
+    "ticker_count": 503,
+    "universe_definition": "SP500",
+    "benchmark": "^GSPC",
+    "feature_contract_or_feature_list": "ml_features.v2",
+    "artifact_files": [
+      {
+        "file": "metadata.json",
+        "sha256": "50de9d75c09beed3048478f59725b2ffcf190757b96d592eb4a3b26b974ca311",
+        "size": 1109,
+        "mtime_ns": 1781031775492539806
+      },
+      {
+        "file": "feature_columns.json",
+        "sha256": "1c51926f69d18359e0a0eb9b5f65c70cffe3c664c98f5a6130581c846c5d0bd6",
+        "size": 561,
+        "mtime_ns": 1781031775492718097
+      },
+      {
+        "file": "model.joblib",
+        "sha256": "5d97b485d924225ace0d40fbaacd5d9be60333fade5fa13210bbd474e6a2cd6a",
+        "size": 717694,
+        "mtime_ns": 1781031775492147014
+      },
+      {
+        "file": "ranking_evaluation.json",
+        "sha256": "fbe81dc3b006df1ad3030f6c8edd1127ac30a1ba8576cb719902d42f7724f26b",
+        "size": 885,
+        "mtime_ns": 1781031784874265870
+      },
+      {
+        "file": "oof_predictions.parquet",
+        "sha256": "d78700e43c14c7012bb1bc1265695a66112836aea1f15ed0820dd012a1639c81",
+        "size": 16686006,
+        "mtime_ns": 1781031776184005478
+      },
+      {
+        "file": "fold_metrics.parquet",
+        "sha256": "0fd4f046a6a594e16f0b44a22e63d6b691d7eb5efda98432b6a722db0c31a5b7",
+        "size": 11042,
+        "mtime_ns": 1781031775496308680
+      },
+      {
+        "file": "scored_snapshot.parquet",
+        "sha256": "f1d53379d0b58c9b83b765f521fb1d7d1b3069a193d090bc636f11a348aa101c",
+        "size": 68571125,
+        "mtime_ns": 1781031784864921705
+      },
+      {
+        "file": "raw_input_snapshot.parquet",
+        "sha256": "0afd1f196dc0aeda731f7a6ae73834a16ef12668c11f392257dfda8ce131b642",
+        "size": 19725946,
+        "mtime_ns": 1781031777749284572
+      },
+      {
+        "file": "provenance.json",
+        "sha256": "bb04f26bbf3381daa11e9d5c1b9c4e1209769e1e0b9fd5804fc19d5f1f87331c",
+        "size": 9587,
+        "mtime_ns": 1781031784874716161
+      },
+      {
+        "file": "artifact_checksums.json",
+        "sha256": "9084416d2a049fce894dbdca5a7825a016ec928d103408c8a3485bda6c29d232",
+        "size": 943,
+        "mtime_ns": 1781031784957115975
+      }
+    ],
+    "creation_timestamp": "2026-06-09T19:02:51Z",
+    "promotion_or_production_status": "candidate_repro_sp500",
+    "has_2026_training_rows": true,
+    "has_explicit_2026_validation_evidence": true,
+    "missing_metadata": []
+  }
+]
