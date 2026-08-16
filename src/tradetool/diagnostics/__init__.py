@@ -1,1 +1,6 @@
-"""Diagnostics integration is intentionally unimplemented in Phase 2."""
+from tradetool.diagnostics.coverage import CoverageDiagnosticsResult, build_coverage_diagnostics
+
+__all__ = [
+    'CoverageDiagnosticsResult',
+    'build_coverage_diagnostics',
+]

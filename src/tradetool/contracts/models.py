@@ -232,7 +232,7 @@ class CoverageReport:
     run_id: str
     run_date: date
     input_universe_count: int
-    normalized_valid_ticker_count: int
+    valid_ticker_count: int
     market_data_coverage_count: int
     enough_history_count: int
     feature_complete_count: int
@@ -251,7 +251,7 @@ class CoverageReport:
         ensure_mapping(self.latest_data_date_distribution, field_name='latest_data_date_distribution')
         validate_coverage_counts(
             input_universe_count=self.input_universe_count,
-            normalized_valid_ticker_count=self.normalized_valid_ticker_count,
+            valid_ticker_count=self.valid_ticker_count,
             market_data_coverage_count=self.market_data_coverage_count,
             enough_history_count=self.enough_history_count,
             feature_complete_count=self.feature_complete_count,
@@ -259,6 +259,10 @@ class CoverageReport:
             ranked_count=self.ranked_count,
             failed_count=self.failed_count,
         )
+
+    @property
+    def normalized_valid_ticker_count(self) -> int:
+        return self.valid_ticker_count
 
 
 @dataclass(frozen=True, slots=True)

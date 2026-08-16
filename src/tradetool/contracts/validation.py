@@ -38,10 +38,10 @@ def validate_positive_rank(rank: int) -> None:
         raise ValueError('rank must be a positive one-based integer.')
 
 
-def validate_coverage_counts(*, input_universe_count: int, normalized_valid_ticker_count: int, market_data_coverage_count: int, enough_history_count: int, feature_complete_count: int, eligible_count: int, ranked_count: int, failed_count: int) -> None:
+def validate_coverage_counts(*, input_universe_count: int, valid_ticker_count: int, market_data_coverage_count: int, enough_history_count: int, feature_complete_count: int, eligible_count: int, ranked_count: int, failed_count: int) -> None:
     counts = [
         input_universe_count,
-        normalized_valid_ticker_count,
+        valid_ticker_count,
         market_data_coverage_count,
         enough_history_count,
         feature_complete_count,
@@ -51,10 +51,10 @@ def validate_coverage_counts(*, input_universe_count: int, normalized_valid_tick
     ]
     if any(value < 0 for value in counts):
         raise ValueError('coverage counts may not be negative.')
-    if normalized_valid_ticker_count > input_universe_count:
-        raise ValueError('normalized_valid_ticker_count cannot exceed input_universe_count.')
-    if market_data_coverage_count > normalized_valid_ticker_count:
-        raise ValueError('market_data_coverage_count cannot exceed normalized_valid_ticker_count.')
+    if valid_ticker_count > input_universe_count:
+        raise ValueError('valid_ticker_count cannot exceed input_universe_count.')
+    if market_data_coverage_count > valid_ticker_count:
+        raise ValueError('market_data_coverage_count cannot exceed valid_ticker_count.')
     if enough_history_count > market_data_coverage_count:
         raise ValueError('enough_history_count cannot exceed market_data_coverage_count.')
     if feature_complete_count > enough_history_count:

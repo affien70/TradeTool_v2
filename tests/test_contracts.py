@@ -93,7 +93,7 @@ class ContractTests(unittest.TestCase):
                 run_id='run-1',
                 run_date=date(2026, 8, 16),
                 input_universe_count=10,
-                normalized_valid_ticker_count=9,
+                valid_ticker_count=9,
                 market_data_coverage_count=9,
                 enough_history_count=8,
                 feature_complete_count=7,

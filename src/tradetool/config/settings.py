@@ -30,5 +30,5 @@ def get_settings(project_root: Path | None = None) -> AppSettings:
         specification_directory=root / 'docs' / 'specification',
         default_ui_language='no',
         application_name='TradeTool v2',
-        contract_version='v2-phase2',
+        contract_version='v2-phase3a',
     )

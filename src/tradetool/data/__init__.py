@@ -1,1 +1,8 @@
-"""Data access is intentionally unimplemented in Phase 2."""
+from tradetool.data.sqlite_readonly import ReadOnlySQLite, SchemaInspection, SchemaTableColumn, inspect_database_schema
+
+__all__ = [
+    'ReadOnlySQLite',
+    'SchemaInspection',
+    'SchemaTableColumn',
+    'inspect_database_schema',
+]

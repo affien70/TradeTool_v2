@@ -18,4 +18,4 @@ class SettingsTests(unittest.TestCase):
             self.assertFalse(any(fragment in key.lower() for fragment in forbidden_fragments), key)
         self.assertEqual(settings.default_ui_language, 'no')
         self.assertEqual(settings.application_name, 'TradeTool v2')
-        self.assertEqual(settings.contract_version, 'v2-phase2')
+        self.assertEqual(settings.contract_version, 'v2-phase3a')
