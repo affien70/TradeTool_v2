@@ -4,6 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from tradetool.diagnostics.baseline_ranking import build_baseline_ranking_diagnostics
 from tradetool.diagnostics.coverage import build_coverage_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
 from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
@@ -91,6 +92,27 @@ def render() -> None:
             [{'reason': key, 'count': value} for key, value in sorted(result.feature_missing_reason_counts.items())],
             use_container_width=True,
         )
+
+    if st.button('Kjør baseline ranking'):
+        if not database_path.strip():
+            st.warning('Oppgi en lokal databasebane for å kjøre baseline-ranking-diagnostikk.')
+            return
+
+        try:
+            result = build_baseline_ranking_diagnostics(
+                db_path=Path(database_path.strip()),
+                universe_id=universe_id.strip() or 'UNSPECIFIED',
+                benchmark_ticker=benchmark_ticker.strip() or None,
+                price_table=price_table.strip() or 'price_history',
+            )
+        except Exception as exc:  # pragma: no cover - surfaced in UI only
+            st.error(str(exc))
+            return
+
+        st.subheader('Baseline ranking')
+        st.caption('Dette er bare diagnostisk baseline-ranking for senere sammenligning, ikke kjøpsråd eller produksjonspolicy.')
+        st.json(result.to_summary_dict())
+        st.dataframe([row.to_dict() for row in result.rows[:20]], use_container_width=True)
 
 
 render()
