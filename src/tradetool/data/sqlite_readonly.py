@@ -12,6 +12,7 @@ UNIVERSE_TABLE_NAME_HINTS = ('universe', 'member', 'membership', 'ticker', 'symb
 TICKER_COLUMN_HINTS = ('ticker', 'symbol', 'ric')
 DATE_COLUMN_HINTS = ('date', 'trade_date', 'price_date', 'as_of_date')
 PRICE_VALUE_HINTS = ('close', 'adj_close', 'adjusted_close', 'last')
+UNIVERSE_CACHE_REQUIRED_COLUMNS = ('universe_key', 'tickers_json')
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +128,8 @@ def _is_price_history_candidate(table_name: str, columns: Sequence[SchemaTableCo
 def _is_universe_candidate(table_name: str, columns: Sequence[SchemaTableColumn]) -> bool:
     lowered_name = table_name.lower()
     column_names = {column.name.lower() for column in columns}
+    if all(name in column_names for name in UNIVERSE_CACHE_REQUIRED_COLUMNS):
+        return True
     if not any(hint in lowered_name for hint in UNIVERSE_TABLE_NAME_HINTS):
         return False
     return any(name in column_names for name in TICKER_COLUMN_HINTS)

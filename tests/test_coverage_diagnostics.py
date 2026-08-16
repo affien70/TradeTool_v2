@@ -18,6 +18,9 @@ def _build_fixture_database(path: Path) -> None:
         connection.execute(
             'CREATE TABLE universe_membership (ticker TEXT, universe_id TEXT)'
         )
+        connection.execute(
+            'CREATE TABLE universe_cache (universe_key TEXT PRIMARY KEY, tickers_json TEXT, source_label TEXT, updated_at TEXT)'
+        )
         rows: list[tuple[str | None, str | None, float | None, float | None]] = []
         rows.extend(('AAA.OL', f'2025-01-{day:02d}', 100.0 + day, 1000.0) for day in range(1, 31))
         rows.extend(('AAA.OL', f'2025-02-{day:02d}', 130.0 + day, 1000.0) for day in range(1, 29))
@@ -40,6 +43,10 @@ def _build_fixture_database(path: Path) -> None:
             'INSERT INTO universe_membership VALUES (?, ?)',
             [('AAA.OL', 'NORWAY_V2'), ('BBB.OL', 'NORWAY_V2'), ('ZZZ.OL', 'NORWAY_V2')],
         )
+        connection.execute(
+            'INSERT INTO universe_cache VALUES (?, ?, ?, ?)',
+            ('NORWAY_V2', json.dumps(['AAA.OL', 'BBB.OL', 'ZZZ.OL']), 'fixture', '2026-08-16T00:00:00Z'),
+        )
 
 
 class CoverageDiagnosticsTests(unittest.TestCase):
@@ -55,6 +62,7 @@ class CoverageDiagnosticsTests(unittest.TestCase):
             self.assertIn('price_history', result.schema.tables)
             self.assertIn('universe_membership', result.schema.tables)
             self.assertIn('price_history', result.schema.price_history_candidates)
+            self.assertIn('universe_cache', result.schema.universe_candidates)
             columns = {column.name for column in result.schema.columns_by_table['price_history']}
             self.assertIn('ticker', columns)
             self.assertIn('date', columns)
@@ -142,4 +150,27 @@ class CoverageDiagnosticsTests(unittest.TestCase):
                 universe_id='NORWAY_V2',
             )
             self.assertEqual(csv_result.universe_source, f'csv:{csv_path.name}')
-            self.assertEqual(fallback_result.universe_source, 'price_history_distinct_tickers')
+            self.assertEqual(fallback_result.universe_source, 'universe_cache:NORWAY_V2')
+            self.assertEqual(fallback_result.report.input_universe_count, 3)
+
+    def test_missing_requested_universe_in_cache_is_reported_clearly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_database(db_path)
+            with self.assertRaisesRegex(ValueError, 'was not found in universe_cache'):
+                build_coverage_diagnostics(
+                    db_path=db_path,
+                    universe_id='SWEDEN_V1',
+                )
+
+    def test_price_history_fallback_still_works_without_universe_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_database(db_path)
+            with sqlite3.connect(db_path) as connection:
+                connection.execute('DROP TABLE universe_cache')
+            result = build_coverage_diagnostics(
+                db_path=db_path,
+                universe_id='NORWAY_V2',
+            )
+            self.assertEqual(result.universe_source, 'price_history_distinct_tickers')

@@ -3,11 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 import csv
+import json
 from pathlib import Path
 
 from tradetool.data import ReadOnlySQLite
 
 TICKER_COLUMN_CANDIDATES = ('ticker', 'symbol', 'ric')
+UNIVERSE_CACHE_TABLE = 'universe_cache'
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +41,12 @@ def load_universe_tickers(
         return _selection_from_values(universe_id=universe_id, source='explicit_ticker_list', values=explicit_tickers)
     if csv_path is not None:
         return _selection_from_csv(universe_id=universe_id, csv_path=csv_path)
+    if database is not None:
+        cache_selection = _selection_from_universe_cache(database=database, universe_id=universe_id)
+        if cache_selection is not None:
+            return cache_selection
+        if UNIVERSE_CACHE_TABLE in database.list_tables():
+            raise ValueError(f'Universe "{universe_id}" was not found in universe_cache.')
     if database is not None and price_table is not None:
         rows = database.fetch_all(
             f'SELECT DISTINCT "{ticker_column}" AS ticker FROM "{price_table}" WHERE "{ticker_column}" IS NOT NULL ORDER BY "{ticker_column}"'
@@ -85,4 +93,36 @@ def _selection_from_values(*, universe_id: str, source: str, values: Iterable[st
         input_count=input_count,
         tickers=tuple(normalized_values),
         invalid_values=tuple(invalid_values),
+    )
+
+
+def _selection_from_universe_cache(*, database: ReadOnlySQLite, universe_id: str) -> UniverseTickerSelection | None:
+    tables = set(database.list_tables())
+    if UNIVERSE_CACHE_TABLE not in tables:
+        return None
+    columns = {column.name.lower() for column in database.list_columns(UNIVERSE_CACHE_TABLE)}
+    required_columns = {'universe_key', 'tickers_json'}
+    if not required_columns.issubset(columns):
+        return None
+    row = database.fetch_one(
+        """
+        SELECT universe_key, tickers_json
+        FROM "universe_cache"
+        WHERE universe_key = ?
+        """,
+        (universe_id,),
+    )
+    if row is None:
+        return None
+    tickers_json = row['tickers_json']
+    try:
+        values = json.loads(str(tickers_json))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'Universe "{universe_id}" has invalid tickers_json in universe_cache.') from exc
+    if not isinstance(values, list):
+        raise ValueError(f'Universe "{universe_id}" tickers_json must decode to a list.')
+    return _selection_from_values(
+        universe_id=universe_id,
+        source=f'universe_cache:{universe_id}',
+        values=values,
     )
