@@ -86,6 +86,9 @@ def _build_fixture_db(path: Path) -> None:
 
 
 class TradePolicyFunctionTests(unittest.TestCase):
+    def test_policy_engine_id_is_balanced_v1(self) -> None:
+        self.assertEqual(TRADE_POLICY_ENGINE_ID, 'trade_policy_v1_balanced_diagnostic')
+
     def test_policy_does_not_change_raw_rank(self) -> None:
         row = _make_row('AAA.OL', raw_rank=7)
         result = apply_trade_policy_diagnostics((row,))[0]
@@ -115,7 +118,7 @@ class TradePolicyFunctionTests(unittest.TestCase):
         self.assertEqual(result.trade_signal, TradeSignal.BUY)
 
     def test_stretched_strong_profile_is_capped_below_buy(self) -> None:
-        row = _make_row('STRETCH.OL', raw_rank=5, overrides={'distance_to_sma50': 0.22, 'distance_to_sma200': 0.45})
+        row = _make_row('STRETCH.OL', raw_rank=5, overrides={'distance_to_sma50': 0.28, 'distance_to_sma200': 0.55})
         result = apply_trade_policy_diagnostics((row,))[0]
         self.assertIn(result.trade_signal, {TradeSignal.WATCH, TradeSignal.REVIEW})
 
@@ -124,8 +127,13 @@ class TradePolicyFunctionTests(unittest.TestCase):
         result = apply_trade_policy_diagnostics((row,))[0]
         self.assertNotEqual(result.trade_signal, TradeSignal.BUY)
 
-    def test_deep_drawdown_profile_is_not_buy(self) -> None:
-        row = _make_row('DRAWDOWN.OL', overrides={'drawdown_252': -0.45})
+    def test_deep_drawdown_alone_does_not_automatically_force_avoid_if_other_gates_are_strong(self) -> None:
+        row = _make_row('DRAWDOWN.OL', overrides={'drawdown_252': -0.35})
+        result = apply_trade_policy_diagnostics((row,))[0]
+        self.assertNotEqual(result.trade_signal, TradeSignal.AVOID)
+
+    def test_bad_high_risk_style_weak_profile_is_not_buy(self) -> None:
+        row = _make_row('DRAWDOWN.OL', overrides={'drawdown_252': -0.45, 'relative_strength_3m': -0.05, 'return_3m': -0.03})
         result = apply_trade_policy_diagnostics((row,))[0]
         self.assertNotEqual(result.trade_signal, TradeSignal.BUY)
 

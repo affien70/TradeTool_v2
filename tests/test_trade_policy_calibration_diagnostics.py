@@ -227,17 +227,18 @@ class TradePolicyCalibrationDiagnosticsTests(unittest.TestCase):
         self.assertEqual(_recommend_scenario(baseline, (balanced,)), RECOMMEND_APPLY)
 
     def test_no_source_policy_thresholds_are_changed(self) -> None:
-        self.assertEqual(MIN_ACCEPTABLE_DRAWDOWN, -0.25)
-        self.assertEqual(MAX_ACCEPTABLE_VOLATILITY, 0.03)
-        self.assertEqual(MAX_MODERATE_VOLATILITY, 0.05)
-        self.assertEqual(MIN_ACCEPTABLE_TRADED_VALUE, 1_000_000.0)
+        self.assertEqual(TRADE_POLICY_ENGINE_ID, 'trade_policy_v1_balanced_diagnostic')
+        self.assertEqual(MIN_ACCEPTABLE_DRAWDOWN, -0.40)
+        self.assertEqual(MAX_ACCEPTABLE_VOLATILITY, 0.04)
+        self.assertEqual(MAX_MODERATE_VOLATILITY, 0.06)
+        self.assertEqual(MIN_ACCEPTABLE_TRADED_VALUE, 750_000.0)
         self.assertEqual(MIN_MODERATE_TRADED_VALUE, 250_000.0)
-        self.assertEqual(MAX_BUY_DISTANCE_TO_SMA50, 0.15)
-        self.assertEqual(MAX_WATCH_DISTANCE_TO_SMA50, 0.30)
-        self.assertEqual(MAX_BUY_DISTANCE_TO_SMA200, 0.35)
-        self.assertEqual(MAX_WATCH_DISTANCE_TO_SMA200, 0.60)
+        self.assertEqual(MAX_BUY_DISTANCE_TO_SMA50, 0.22)
+        self.assertEqual(MAX_WATCH_DISTANCE_TO_SMA50, 0.35)
+        self.assertEqual(MAX_BUY_DISTANCE_TO_SMA200, 0.45)
+        self.assertEqual(MAX_WATCH_DISTANCE_TO_SMA200, 0.70)
         self.assertEqual(MAX_BUY_RAW_RANK, 20)
-        self.assertEqual(MAX_WATCH_RAW_RANK, 60)
+        self.assertEqual(MAX_WATCH_RAW_RANK, 80)
 
     def test_no_candidate_type_or_ml_score_field_is_produced(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
