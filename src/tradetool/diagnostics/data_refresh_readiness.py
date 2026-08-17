@@ -19,7 +19,8 @@ DECISION_BLOCKED_SCHEMA = 'blocked_schema_unknown'
 DECISION_BLOCKED_QUALITY = 'blocked_data_quality_issue'
 DECISION_BLOCKED_UNSAFE = 'blocked_unsafe_path'
 
-_REQUIRED_PRICE_COLUMNS = ('ticker', 'date', 'open', 'high', 'low', 'close', 'volume')
+_DATE_COLUMN_CANDIDATES = ('date', 'trade_date', 'price_date', 'as_of_date')
+_REQUIRED_PRICE_COLUMNS = ('ticker', 'open', 'high', 'low', 'close', 'volume')
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +84,7 @@ class DataRefreshReadinessResult:
     universe_ticker_count: int
     benchmark_ticker: str | None
     price_table_columns: tuple[str, ...]
+    price_date_column: str | None
     required_columns_present: tuple[str, ...]
     required_columns_missing: tuple[str, ...]
     duplicate_ticker_date_rows: int
@@ -112,6 +114,7 @@ class DataRefreshReadinessResult:
             'universe_ticker_count': self.universe_ticker_count,
             'benchmark_ticker': self.benchmark_ticker,
             'price_table_columns': list(self.price_table_columns),
+            'price_date_column': self.price_date_column,
             'required_columns_present': list(self.required_columns_present),
             'required_columns_missing': list(self.required_columns_missing),
             'duplicate_ticker_date_rows': self.duplicate_ticker_date_rows,
@@ -150,27 +153,41 @@ def build_data_refresh_readiness_audit(
     table_columns = tuple(column.name for column in schema.columns_by_table.get(resolved_price_table, ()))
     normalized_columns = {name.lower(): name for name in table_columns}
     required_present = tuple(column for column in _REQUIRED_PRICE_COLUMNS if column in normalized_columns)
-    required_missing = tuple(column for column in _REQUIRED_PRICE_COLUMNS if column not in normalized_columns)
     ticker_column = _resolve_column_name(schema, resolved_price_table, ('ticker', 'symbol', 'ric'), 'ticker')
-    date_column = _resolve_column_name(schema, resolved_price_table, ('date', 'trade_date', 'price_date', 'as_of_date'), 'date')
+    price_date_column = _resolve_optional_column_name(schema, resolved_price_table, _DATE_COLUMN_CANDIDATES)
+    required_missing = tuple(
+        list(column for column in _REQUIRED_PRICE_COLUMNS if column not in normalized_columns)
+        + ([] if price_date_column is not None else ['date'])
+    )
     universe = load_universe_tickers(
         universe_id=universe_id,
         database=database,
         price_table=resolved_price_table,
         ticker_column=ticker_column,
     )
-    stats = _collect_refresh_statistics(
+    relevant_tickers = set(universe.tickers)
+    if benchmark_ticker:
+        relevant_tickers.add(benchmark_ticker.upper())
+    stats = _collect_refresh_statistics_without_date(
         database=database,
         table_name=resolved_price_table,
         ticker_column=ticker_column,
-        date_column=date_column,
-        has_all_ohlcv_columns=len(required_missing) == 0,
-        open_column=normalized_columns.get('open'),
-        high_column=normalized_columns.get('high'),
-        low_column=normalized_columns.get('low'),
-        close_column=normalized_columns.get('close'),
-        volume_column=normalized_columns.get('volume'),
+        relevant_tickers=relevant_tickers,
     )
+    if price_date_column is not None:
+        stats = _collect_refresh_statistics(
+            database=database,
+            table_name=resolved_price_table,
+            ticker_column=ticker_column,
+            date_column=price_date_column,
+            relevant_tickers=relevant_tickers,
+            has_all_ohlcv_columns=len(required_missing) == 0,
+            open_column=normalized_columns.get('open'),
+            high_column=normalized_columns.get('high'),
+            low_column=normalized_columns.get('low'),
+            close_column=normalized_columns.get('close'),
+            volume_column=normalized_columns.get('volume'),
+        )
 
     current_date = today or datetime.now(UTC).date()
     universe_latest_dates = {
@@ -226,6 +243,7 @@ def build_data_refresh_readiness_audit(
         universe_ticker_count=len(universe.tickers),
         benchmark_ticker=benchmark_ticker,
         price_table_columns=table_columns,
+        price_date_column=price_date_column,
         required_columns_present=required_present,
         required_columns_missing=required_missing,
         duplicate_ticker_date_rows=int(stats['duplicate_ticker_date_rows']),
@@ -279,12 +297,53 @@ def _latest_date_distribution_for_universe(latest_date_by_ticker: Mapping[str, d
     return distribution
 
 
+def _resolve_optional_column_name(schema, table_name: str, candidates: Sequence[str]) -> str | None:
+    columns = schema.columns_by_table.get(table_name)
+    if columns is None:
+        return None
+    normalized = {column.name.lower(): column.name for column in columns}
+    for candidate in candidates:
+        if candidate in normalized:
+            return normalized[candidate]
+    return None
+
+
+def _collect_refresh_statistics_without_date(
+    *,
+    database: ReadOnlySQLite,
+    table_name: str,
+    ticker_column: str,
+    relevant_tickers: set[str],
+) -> dict[str, object]:
+    quoted_ticker = f'"{ticker_column}"'
+    scope_filter_sql, scope_parameters = _scope_filter_clause(quoted_ticker, relevant_tickers)
+    rows_by_ticker_rows = database.fetch_all(
+        f"""
+        SELECT UPPER(TRIM({quoted_ticker})) AS ticker, COUNT(*) AS row_count
+        FROM "{table_name}"
+        WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> ''{scope_filter_sql}
+        GROUP BY UPPER(TRIM({quoted_ticker}))
+        """,
+        scope_parameters,
+    )
+    return {
+        'rows_by_ticker': {str(row['ticker']): int(row['row_count']) for row in rows_by_ticker_rows},
+        'latest_date_by_ticker': {},
+        'duplicate_ticker_date_rows': 0,
+        'invalid_ohlc_row_count': 0,
+        'invalid_ohlc_tickers': set(),
+        'min_price_date': None,
+        'max_price_date': None,
+    }
+
+
 def _collect_refresh_statistics(
     *,
     database: ReadOnlySQLite,
     table_name: str,
     ticker_column: str,
     date_column: str,
+    relevant_tickers: set[str],
     has_all_ohlcv_columns: bool,
     open_column: str | None,
     high_column: str | None,
@@ -294,21 +353,24 @@ def _collect_refresh_statistics(
 ) -> dict[str, object]:
     quoted_ticker = f'"{ticker_column}"'
     quoted_date = f'"{date_column}"'
+    scope_filter_sql, scope_parameters = _scope_filter_clause(quoted_ticker, relevant_tickers)
     rows_by_ticker_rows = database.fetch_all(
         f"""
         SELECT UPPER(TRIM({quoted_ticker})) AS ticker, COUNT(*) AS row_count
         FROM "{table_name}"
-        WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> ''
+        WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> ''{scope_filter_sql}
         GROUP BY UPPER(TRIM({quoted_ticker}))
-        """
+        """,
+        scope_parameters,
     )
     latest_by_ticker_rows = database.fetch_all(
         f"""
         SELECT UPPER(TRIM({quoted_ticker})) AS ticker, MAX(date({quoted_date})) AS latest_date
         FROM "{table_name}"
-        WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> '' AND date({quoted_date}) IS NOT NULL
+        WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> '' AND date({quoted_date}) IS NOT NULL{scope_filter_sql}
         GROUP BY UPPER(TRIM({quoted_ticker}))
-        """
+        """,
+        scope_parameters,
     )
     duplicate_row = database.fetch_one(
         f"""
@@ -316,11 +378,12 @@ def _collect_refresh_statistics(
         FROM (
             SELECT UPPER(TRIM({quoted_ticker})) AS ticker, date({quoted_date}) AS price_date, COUNT(*) AS duplicate_count
             FROM "{table_name}"
-            WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> '' AND date({quoted_date}) IS NOT NULL
+            WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> '' AND date({quoted_date}) IS NOT NULL{scope_filter_sql}
             GROUP BY UPPER(TRIM({quoted_ticker})), date({quoted_date})
             HAVING COUNT(*) > 1
         )
-        """
+        """,
+        scope_parameters,
     )
     invalid_ohlc_row_count = 0
     invalid_ohlc_tickers: set[str] = set()
@@ -329,7 +392,7 @@ def _collect_refresh_statistics(
             f"""
             SELECT UPPER(TRIM({quoted_ticker})) AS ticker
             FROM "{table_name}"
-            WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> '' AND (
+            WHERE {quoted_ticker} IS NOT NULL AND TRIM({quoted_ticker}) <> ''{scope_filter_sql} AND (
                 "{open_column}" IS NULL OR
                 "{high_column}" IS NULL OR
                 "{low_column}" IS NULL OR
@@ -341,7 +404,8 @@ def _collect_refresh_statistics(
                 "{open_column}" > "{high_column}" OR
                 "{close_column}" > "{high_column}"
             )
-            """
+            """,
+            scope_parameters,
         )
         invalid_ohlc_row_count = len(invalid_rows)
         invalid_ohlc_tickers = {str(row['ticker']) for row in invalid_rows}
@@ -349,8 +413,9 @@ def _collect_refresh_statistics(
         f"""
         SELECT MIN(date({quoted_date})) AS min_date, MAX(date({quoted_date})) AS max_date
         FROM "{table_name}"
-        WHERE {quoted_date} IS NOT NULL
-        """
+        WHERE {quoted_date} IS NOT NULL{scope_filter_sql}
+        """,
+        scope_parameters,
     )
     return {
         'rows_by_ticker': {str(row['ticker']): int(row['row_count']) for row in rows_by_ticker_rows},
@@ -364,6 +429,14 @@ def _collect_refresh_statistics(
         'min_price_date': _coerce_optional_date(None if min_max_row is None else min_max_row['min_date']),
         'max_price_date': _coerce_optional_date(None if min_max_row is None else min_max_row['max_date']),
     }
+
+
+def _scope_filter_clause(quoted_ticker: str, relevant_tickers: set[str]) -> tuple[str, tuple[str, ...]]:
+    normalized_tickers = tuple(sorted(ticker.upper() for ticker in relevant_tickers if ticker))
+    if not normalized_tickers:
+        return '', ()
+    placeholders = ', '.join('?' for _ in normalized_tickers)
+    return f' AND UPPER(TRIM({quoted_ticker})) IN ({placeholders})', normalized_tickers
 
 
 def _build_risk_audit_rows(*, is_unsafe_path: bool, benchmark_ticker: str | None) -> tuple[SchemaWriteRiskAuditRow, ...]:
@@ -408,6 +481,7 @@ def _render_summary_markdown(result: DataRefreshReadinessResult) -> str:
         f'- Read-only open status: {result.read_only_open_status}',
         f'- Unsafe legacy DB path: {result.unsafe_legacy_db_path}',
         f'- Detected price table: {result.detected_price_table}',
+        f'- Selected date column: {result.price_date_column or "none"}',
         f'- Detected universe source: {result.detected_universe_source}',
         f'- Universe id: {result.universe_id}',
         f'- Universe ticker count: {result.universe_ticker_count}',

@@ -22,14 +22,14 @@ from tradetool.policy.trade_policy import TRADE_POLICY_ENGINE_ID
 
 
 def _create_base_schema(connection: sqlite3.Connection) -> None:
-    connection.execute('CREATE TABLE price_history (ticker TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL)')
+    connection.execute('CREATE TABLE price_history (ticker TEXT, price_date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, updated_at TEXT)')
     connection.execute('CREATE TABLE universe_cache (universe_key TEXT PRIMARY KEY, tickers_json TEXT, source_label TEXT, updated_at TEXT)')
 
 
 def _insert_price(connection: sqlite3.Connection, ticker: str, price_date: str, open_value: float, high_value: float, low_value: float, close_value: float, volume_value: float) -> None:
     connection.execute(
-        'INSERT INTO price_history VALUES (?, ?, ?, ?, ?, ?, ?)',
-        (ticker, price_date, open_value, high_value, low_value, close_value, volume_value),
+        'INSERT INTO price_history VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        (ticker, price_date, open_value, high_value, low_value, close_value, volume_value, f'{price_date}T16:00:00Z'),
     )
 
 
@@ -48,11 +48,11 @@ def _build_ready_fixture(path: Path) -> None:
 
 def _build_missing_column_fixture(path: Path) -> None:
     with sqlite3.connect(path) as connection:
-        connection.execute('CREATE TABLE price_history (ticker TEXT, date TEXT, close REAL)')
+        connection.execute('CREATE TABLE price_history (ticker TEXT, close REAL, open REAL, high REAL, low REAL, volume REAL)')
         connection.execute('CREATE TABLE universe_cache (universe_key TEXT PRIMARY KEY, tickers_json TEXT, source_label TEXT, updated_at TEXT)')
         connection.execute(
-            'INSERT INTO price_history VALUES (?, ?, ?)',
-            ('AAA.OL', '2026-06-19', 100.0),
+            'INSERT INTO price_history VALUES (?, ?, ?, ?, ?, ?)',
+            ('AAA.OL', 100.0, 100.0, 101.0, 99.0, 1000.0),
         )
         connection.execute(
             'INSERT INTO universe_cache VALUES (?, ?, ?, ?)',
@@ -70,6 +70,12 @@ def _build_invalid_ohlc_fixture(path: Path) -> None:
     _build_ready_fixture(path)
     with sqlite3.connect(path) as connection:
         _insert_price(connection, 'AAA.OL', '2026-06-20', 100, 99, 101, 100, 1000)
+
+
+def _build_out_of_scope_invalid_ohlc_fixture(path: Path) -> None:
+    _build_ready_fixture(path)
+    with sqlite3.connect(path) as connection:
+        _insert_price(connection, 'OUTSIDE.US', '2026-06-20', 100, 99, 101, 100, 1000)
 
 
 class DataRefreshReadinessTests(unittest.TestCase):
@@ -124,17 +130,28 @@ class DataRefreshReadinessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / 'fixture.sqlite'
             _build_ready_fixture(db_path)
-            result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2')
+            result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2', price_table='price_history')
             self.assertEqual(result.required_columns_missing, ())
+            self.assertEqual(result.price_date_column, 'price_date')
             self.assertIn('open', result.required_columns_present)
             self.assertIn('volume', result.required_columns_present)
 
-    def test_missing_required_price_columns_causes_blocked_schema_recommendation(self) -> None:
+    def test_summary_reports_selected_date_column(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            out_dir = Path(temp_dir) / 'audit_output'
+            _build_ready_fixture(db_path)
+            result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2')
+            write_data_refresh_readiness_outputs(result=result, out_dir=out_dir)
+            summary = json.loads((out_dir / 'data_refresh_readiness_summary.json').read_text(encoding='utf-8'))
+            self.assertEqual(summary['price_date_column'], 'price_date')
+
+    def test_missing_both_date_and_price_date_causes_blocked_schema_recommendation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / 'fixture.sqlite'
             _build_missing_column_fixture(db_path)
-            result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2')
-            self.assertIn('open', result.required_columns_missing)
+            result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2', price_table='price_history')
+            self.assertIn('date', result.required_columns_missing)
             self.assertEqual(result.recommendation, DECISION_BLOCKED_SCHEMA)
 
     def test_duplicate_ticker_date_rows_cause_blocked_data_quality_recommendation(self) -> None:
@@ -152,6 +169,14 @@ class DataRefreshReadinessTests(unittest.TestCase):
             result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2', benchmark_ticker='^OSEAX')
             self.assertGreater(result.invalid_ohlc_row_count, 0)
             self.assertEqual(result.recommendation, DECISION_BLOCKED_QUALITY)
+
+    def test_invalid_ohlc_rows_outside_requested_universe_do_not_block_recommendation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_out_of_scope_invalid_ohlc_fixture(db_path)
+            result = build_data_refresh_readiness_audit(db_path=db_path, universe_id='NORWAY_V2', benchmark_ticker='^OSEAX')
+            self.assertEqual(result.invalid_ohlc_row_count, 0)
+            self.assertEqual(result.recommendation, DECISION_READY)
 
     def test_universe_cache_source_is_used_for_named_universe(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -206,4 +231,3 @@ class DataRefreshReadinessTests(unittest.TestCase):
         self.assertIn("TRADE_POLICY_ENGINE_ID = 'trade_policy_v1_balanced_diagnostic'", trade_policy_source)
         self.assertNotIn('holdings_signal', audit_source)
         self.assertNotIn('ml_score', audit_source)
-
