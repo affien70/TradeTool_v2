@@ -102,6 +102,18 @@ class MarketDataDryRunResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MarketDataWriteResult:
+    row_count_before: int
+    row_count_after: int
+    inserted_count: int
+    updated_count: int
+    skipped_count: int
+    invalid_row_count: int
+    invalid_reasons: Mapping[str, int]
+    rows: tuple[MarketDataDryRunValidationRow, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class MarketDataSchemaInspectionResult:
     db_path: Path
     table_name: str
@@ -281,17 +293,74 @@ def _apply_market_data_rows_for_test(*, db_path: str | Path, rows: Sequence[Mark
         connection.commit()
 
 
+def write_market_data_rows_for_test(
+    *,
+    db_path: str | Path,
+    rows: Sequence[MarketDataRow],
+    allow_test_db_write: bool,
+) -> MarketDataWriteResult:
+    if not allow_test_db_write:
+        raise ValueError('Explicit allow_test_db_write approval is required for temporary market-data writes.')
+    schema = initialize_market_data_schema(db_path)
+    dry_run = dry_run_market_data_rows(db_path=schema.db_path, rows=rows)
+    if dry_run.invalid_row_count > 0:
+        return MarketDataWriteResult(
+            row_count_before=schema.row_count,
+            row_count_after=schema.row_count,
+            inserted_count=0,
+            updated_count=0,
+            skipped_count=0,
+            invalid_row_count=dry_run.invalid_row_count,
+            invalid_reasons=dict(dry_run.invalid_reasons),
+            rows=dry_run.rows,
+        )
+
+    action_by_key = {
+        (row.ticker.strip().upper(), row.price_date.strip(), row.data_source.strip()): row.action
+        for row in dry_run.rows
+        if row.valid
+    }
+    resolved = schema.db_path
+    with sqlite3.connect(resolved) as connection:
+        connection.execute('BEGIN')
+        row_count_before = int(connection.execute(f'SELECT COUNT(*) FROM "{V2_PRICE_TABLE_NAME}"').fetchone()[0])
+        for row in rows:
+            action = action_by_key.get(row.key())
+            if action == 'would_skip':
+                continue
+            if action not in {'would_insert', 'would_update'}:
+                raise ValueError(f'Unexpected market-data write action for {row.key()}: {action}')
+            _execute_market_data_upsert(connection, row)
+        row_count_after = int(connection.execute(f'SELECT COUNT(*) FROM "{V2_PRICE_TABLE_NAME}"').fetchone()[0])
+    return MarketDataWriteResult(
+        row_count_before=row_count_before,
+        row_count_after=row_count_after,
+        inserted_count=dry_run.would_insert,
+        updated_count=dry_run.would_update,
+        skipped_count=dry_run.would_skip,
+        invalid_row_count=0,
+        invalid_reasons={},
+        rows=dry_run.rows,
+    )
+
+
 def _validate_market_data_row(row: MarketDataRow) -> tuple[str, ...]:
     reasons: list[str] = []
     ticker = row.ticker.strip()
     price_date = row.price_date.strip()
     data_source = row.data_source.strip()
+    created_at_utc = row.created_at_utc.strip()
+    updated_at_utc = row.updated_at_utc.strip()
     if not ticker:
         reasons.append('empty_ticker')
     if not price_date:
         reasons.append('empty_price_date')
     if not data_source:
         reasons.append('empty_data_source')
+    if not created_at_utc:
+        reasons.append('empty_created_at_utc')
+    if not updated_at_utc:
+        reasons.append('empty_updated_at_utc')
     if row.adjusted_close <= 0:
         reasons.append('nonpositive_adjusted_close')
     if row.volume < 0:
@@ -333,7 +402,7 @@ def _load_existing_keys(db_path: Path) -> dict[tuple[str, str, str], tuple[objec
         rows = connection.execute(
             f"""
             SELECT ticker, price_date, data_source, raw_open, raw_high, raw_low, raw_close,
-                   adjusted_close, volume, created_at_utc, updated_at_utc
+                   adjusted_close, volume
             FROM {V2_PRICE_TABLE_NAME}
             """
         ).fetchall()
@@ -345,8 +414,6 @@ def _load_existing_keys(db_path: Path) -> dict[tuple[str, str, str], tuple[objec
             row['raw_close'],
             row['adjusted_close'],
             row['volume'],
-            row['created_at_utc'],
-            row['updated_at_utc'],
         )
         for row in rows
     }
@@ -360,6 +427,36 @@ def _row_payload_signature(row: MarketDataRow) -> tuple[object, ...]:
         row.raw_close,
         row.adjusted_close,
         row.volume,
-        row.created_at_utc.strip(),
-        row.updated_at_utc.strip(),
+    )
+
+
+def _execute_market_data_upsert(connection: sqlite3.Connection, row: MarketDataRow) -> None:
+    connection.execute(
+        f"""
+        INSERT INTO {V2_PRICE_TABLE_NAME} (
+            ticker, price_date, raw_open, raw_high, raw_low, raw_close,
+            adjusted_close, volume, data_source, created_at_utc, updated_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, price_date, data_source) DO UPDATE SET
+            raw_open = excluded.raw_open,
+            raw_high = excluded.raw_high,
+            raw_low = excluded.raw_low,
+            raw_close = excluded.raw_close,
+            adjusted_close = excluded.adjusted_close,
+            volume = excluded.volume,
+            updated_at_utc = excluded.updated_at_utc
+        """,
+        (
+            row.ticker.strip().upper(),
+            row.price_date.strip(),
+            row.raw_open,
+            row.raw_high,
+            row.raw_low,
+            row.raw_close,
+            row.adjusted_close,
+            row.volume,
+            row.data_source.strip(),
+            row.created_at_utc.strip(),
+            row.updated_at_utc.strip(),
+        ),
     )
