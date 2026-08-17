@@ -11,6 +11,13 @@ from tradetool.policy.eligibility import (
     evaluate_structural_eligibility,
     summarize_eligibility_results,
 )
+from tradetool.policy.candidate_type import (
+    CANDIDATE_TYPE_ENGINE_ID,
+    CandidateTypeDiagnosticsRow,
+    CandidateTypeInputRow,
+    apply_candidate_type_diagnostics,
+    summarize_candidate_types,
+)
 from tradetool.policy.trade_policy import (
     TRADE_POLICY_ENGINE_ID,
     TradePolicyDiagnosticsRow,
@@ -32,8 +39,13 @@ __all__ = [
     'TradePolicyDiagnosticsRow',
     'TradePolicyInputRow',
     'apply_trade_policy_diagnostics',
+    'CANDIDATE_TYPE_ENGINE_ID',
+    'CandidateTypeDiagnosticsRow',
+    'CandidateTypeInputRow',
+    'apply_candidate_type_diagnostics',
     'build_eligibility_results',
     'evaluate_structural_eligibility',
+    'summarize_candidate_types',
     'summarize_trade_policy',
     'summarize_eligibility_results',
 ]

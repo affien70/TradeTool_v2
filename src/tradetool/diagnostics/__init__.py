@@ -1,3 +1,8 @@
+from tradetool.diagnostics.candidate_type import (
+    CandidateTypeDiagnosticsResult,
+    build_candidate_type_diagnostics,
+    write_candidate_type_outputs,
+)
 from tradetool.diagnostics.baseline_ranking import (
     BaselineRankingDiagnosticsResult,
     build_baseline_ranking_diagnostics,
@@ -28,6 +33,7 @@ from tradetool.diagnostics.trade_policy_sanity import (
 
 __all__ = [
     'BaselineRankingDiagnosticsResult',
+    'CandidateTypeDiagnosticsResult',
     'BaselineSanityDiagnosticsResult',
     'CoverageDiagnosticsResult',
     'EligibilityDiagnosticsResult',
@@ -35,6 +41,7 @@ __all__ = [
     'TradePolicyDiagnosticsResult',
     'TradePolicyCalibrationResult',
     'TradePolicySanityResult',
+    'build_candidate_type_diagnostics',
     'build_baseline_ranking_diagnostics',
     'build_baseline_sanity_diagnostics',
     'build_coverage_diagnostics',
@@ -46,5 +53,6 @@ __all__ = [
     'write_trade_policy_outputs',
     'write_trade_policy_calibration_outputs',
     'write_trade_policy_sanity_outputs',
+    'write_candidate_type_outputs',
     'write_baseline_sanity_outputs',
 ]
