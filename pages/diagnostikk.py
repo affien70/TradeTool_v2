@@ -10,6 +10,7 @@ from tradetool.diagnostics.coverage import build_coverage_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
 from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
 from tradetool.diagnostics.trade_policy import build_trade_policy_diagnostics
+from tradetool.diagnostics.trade_policy_calibration import build_trade_policy_calibration_report
 from tradetool.diagnostics.trade_policy_sanity import build_trade_policy_sanity_report
 
 
@@ -196,6 +197,36 @@ def render() -> None:
                     'not_buy_explanation': '' if row.trade_signal.value == 'BUY' else ', '.join(row.policy_reasons),
                 }
                 for row in result.policy.rows[:20]
+            ],
+            use_container_width=True,
+        )
+
+    if st.button('Kjør trade-policy kalibrering'):
+        if not database_path.strip():
+            st.warning('Oppgi en lokal databasebane for å kjøre trade-policy-kalibrering.')
+            return
+        try:
+            result = build_trade_policy_calibration_report(
+                db_path=Path(database_path.strip()),
+                universe_id=universe_id.strip() or 'UNSPECIFIED',
+                benchmark_ticker=benchmark_ticker.strip() or None,
+                price_table=price_table.strip() or 'price_history',
+            )
+        except Exception as exc:  # pragma: no cover
+            st.error(str(exc))
+            return
+        st.subheader('Trade-policy kalibrering')
+        st.caption('Dette er bare en scenario-rapport for threshold-kalibrering, ikke kjøpsråd eller produksjonsgodkjenning.')
+        st.json(result.to_summary_dict())
+        st.dataframe(
+            [
+                {
+                    'scenario': scenario.name,
+                    'signals': ', '.join(f'{signal}={count}' for signal, count in sorted(scenario.signal_counts.items())),
+                    'positive_buy_watch': scenario.positive_buy_or_watch_count,
+                    'bad_buy_watch': scenario.bad_buy_or_watch_count,
+                }
+                for scenario in result.scenario_summaries
             ],
             use_container_width=True,
         )
