@@ -182,8 +182,8 @@ def _normalize_yahoo_row(
     row_mapping: Mapping[str, object],
 ) -> SourceMarketDataRow:
     price_date = _coerce_index_date(index_value)
-    raw_close = _coerce_optional_float(row_mapping.get('Close'))
-    adjusted_close = _coerce_optional_float(row_mapping.get('Adj Close'))
+    raw_close = _coerce_optional_float(_mapping_get(row_mapping, 'Close'))
+    adjusted_close = _coerce_optional_float(_mapping_get(row_mapping, 'Adj Close'))
     warning_codes: list[str] = []
     if adjusted_close is None and raw_close is not None:
         adjusted_close = raw_close
@@ -191,12 +191,12 @@ def _normalize_yahoo_row(
     return SourceMarketDataRow(
         ticker=ticker,
         price_date=price_date,
-        raw_open=_coerce_optional_float(row_mapping.get('Open')),
-        raw_high=_coerce_optional_float(row_mapping.get('High')),
-        raw_low=_coerce_optional_float(row_mapping.get('Low')),
+        raw_open=_coerce_optional_float(_mapping_get(row_mapping, 'Open')),
+        raw_high=_coerce_optional_float(_mapping_get(row_mapping, 'High')),
+        raw_low=_coerce_optional_float(_mapping_get(row_mapping, 'Low')),
         raw_close=raw_close,
         adjusted_close=adjusted_close,
-        volume=_coerce_optional_float(row_mapping.get('Volume')),
+        volume=_coerce_optional_float(_mapping_get(row_mapping, 'Volume')),
         data_source='yahoo',
         warning_codes=tuple(sorted(set(warning_codes))),
     )
@@ -219,3 +219,12 @@ def _coerce_optional_float(value: object) -> float | None:
     except Exception:
         pass
     return float(value)
+
+
+def _mapping_get(row_mapping: Mapping[object, object], label: str) -> object | None:
+    if label in row_mapping:
+        return row_mapping[label]
+    for key, value in row_mapping.items():
+        if isinstance(key, tuple) and key and key[0] == label:
+            return value
+    return None

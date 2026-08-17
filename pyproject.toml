@@ -8,7 +8,9 @@ version = '0.1.0'
 description = 'Standalone Phase 2 foundation for TradeTool v2'
 readme = 'README.md'
 requires-python = '>=3.12'
-dependencies = []
+dependencies = [
+    'yfinance==0.2.65',
+]
 
 [tool.setuptools]
 package-dir = {'' = 'src'}

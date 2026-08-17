@@ -15,6 +15,7 @@ from tradetool.data.market_data_source import (
     MarketDataSourceFetchResult,
     SourceMarketDataRow,
     TickerFetchStatus,
+    _normalize_yahoo_row,
 )
 from tradetool.diagnostics.market_data_fetch_dry_run import (
     build_market_data_fetch_dry_run,
@@ -160,6 +161,27 @@ class MarketDataFetchDryRunTests(unittest.TestCase):
         )
         self.assertEqual(result.normalized_rows[0].adjusted_close, result.normalized_rows[0].raw_close)
         self.assertIn('adjusted_close_fallback_to_raw_close', result.normalized_rows[0].warning_codes)
+
+    def test_yahoo_multiindex_row_mapping_is_normalized_correctly(self) -> None:
+        row = _normalize_yahoo_row(
+            ticker='CAMBI.OL',
+            index_value=date(2026, 6, 19),
+            row_mapping={
+                ('Adj Close', 'CAMBI.OL'): 22.5,
+                ('Close', 'CAMBI.OL'): 22.5,
+                ('High', 'CAMBI.OL'): 22.5,
+                ('Low', 'CAMBI.OL'): 20.0,
+                ('Open', 'CAMBI.OL'): 20.0,
+                ('Volume', 'CAMBI.OL'): 18547.0,
+            },
+        )
+        self.assertEqual(row.price_date, '2026-06-19')
+        self.assertEqual(row.raw_open, 20.0)
+        self.assertEqual(row.raw_high, 22.5)
+        self.assertEqual(row.raw_low, 20.0)
+        self.assertEqual(row.raw_close, 22.5)
+        self.assertEqual(row.adjusted_close, 22.5)
+        self.assertEqual(row.volume, 18547.0)
 
     def test_dry_run_fetch_writes_no_rows(self) -> None:
         initialize_market_data_schema(self.db_path)
