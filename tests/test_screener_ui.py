@@ -21,7 +21,11 @@ from tradetool.policy.trade_policy import (
     MIN_MODERATE_TRADED_VALUE,
     TRADE_POLICY_ENGINE_ID,
 )
-from tradetool.ui.screener import build_minimal_screener_result
+from tradetool.ui.screener import (
+    build_minimal_screener_result,
+    build_selected_ticker_chart_detail,
+    build_selected_ticker_detail,
+)
 
 
 def _insert_rows(connection: sqlite3.Connection, ticker: str, closes: list[float], *, last_date: date, volume: float = 100.0) -> None:
@@ -134,3 +138,44 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         candidate_source = Path('src/tradetool/policy/candidate_type.py').read_text(encoding='utf-8')
         self.assertIn("CANDIDATE_TYPE_ENGINE_ID = 'candidate_type_v0_diagnostic'", candidate_source)
         self.assertIn('def _classify_row', candidate_source)
+
+    def test_selected_ticker_detail_model_can_be_built_from_synthetic_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_db(db_path)
+            result = build_minimal_screener_result(db_path=db_path, universe_id='NORWAY_V2', benchmark_ticker='^OSEAX')
+            detail = build_selected_ticker_detail(result, ticker=result.rows[0].ticker, include_avoid=True)
+            self.assertEqual(detail.ticker, result.rows[0].ticker)
+            self.assertEqual(detail.raw_rank, result.rows[0].raw_rank)
+
+    def test_selected_ticker_chart_data_loads_only_selected_ticker_plus_benchmark(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_db(db_path)
+            chart = build_selected_ticker_chart_detail(db_path=db_path, ticker='LEADER.OL', benchmark_ticker='^OSEAX')
+            self.assertEqual(set(chart.loaded_tickers), {'LEADER.OL', '^OSEAX'})
+
+    def test_chart_data_aligns_ticker_and_benchmark_dates_deterministically(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_db(db_path)
+            chart = build_selected_ticker_chart_detail(db_path=db_path, ticker='LEADER.OL', benchmark_ticker='^OSEAX')
+            self.assertTrue(all(point.indexed_benchmark is not None for point in chart.price_points))
+            dates = [point.price_date for point in chart.price_points]
+            self.assertEqual(dates, sorted(dates))
+
+    def test_indexed_chart_starts_at_100_for_ticker_and_benchmark(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_db(db_path)
+            chart = build_selected_ticker_chart_detail(db_path=db_path, ticker='LEADER.OL', benchmark_ticker='^OSEAX')
+            first = chart.price_points[0]
+            self.assertEqual(round(first.indexed_close or 0.0, 6), 100.0)
+            self.assertEqual(round(first.indexed_benchmark or 0.0, 6), 100.0)
+
+    def test_missing_benchmark_data_is_handled_gracefully(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / 'fixture.sqlite'
+            _build_fixture_db(db_path)
+            chart = build_selected_ticker_chart_detail(db_path=db_path, ticker='LEADER.OL', benchmark_ticker='^MISSING')
+            self.assertIsNotNone(chart.warning)

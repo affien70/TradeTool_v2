@@ -35,6 +35,14 @@ class _StreamlitStub:
     def dataframe(self, *args, **kwargs) -> None:
         return None
 
+    def vega_lite_chart(self, *args, **kwargs) -> None:
+        return None
+
+    def cache_data(self, *args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
     def columns(self, count: int):
         return [self for _ in range(count)]
 
@@ -46,6 +54,9 @@ class _StreamlitStub:
 
     def button(self, *args, **kwargs) -> bool:
         return False
+
+    def selectbox(self, label: str, options, index: int = 0, **kwargs):
+        return options[index] if options else None
 
     def metric(self, *args, **kwargs) -> None:
         return None
@@ -72,8 +83,11 @@ class ScreenerPageTests(unittest.TestCase):
             raise AssertionError('database access helper should not run during import')
 
         ui_module.build_minimal_screener_result = _fail
+        ui_module.build_selected_ticker_chart_detail = _fail
+        ui_module.build_selected_ticker_detail = _fail
         previous_streamlit = sys.modules.get('streamlit')
         previous_ui = sys.modules.get('tradetool.ui.screener')
+        streamlit_module.session_state = {}
         sys.modules['streamlit'] = streamlit_module
         sys.modules['tradetool.ui.screener'] = ui_module
         try:
@@ -96,3 +110,4 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("if st.button('Kjør diagnostisk screener')", source)
         prefix = source.split("if st.button('Kjør diagnostisk screener')", 1)[0]
         self.assertNotIn('build_minimal_screener_result(', prefix)
+        self.assertIn("st.session_state.get('screener_result')", source)
