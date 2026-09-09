@@ -34,6 +34,7 @@ class MarketDataWriteRowSample:
     volume: float | None
     data_source: str
     warning_codes: tuple[str, ...]
+    validation_warnings: tuple[str, ...]
     action: str
     reasons: tuple[str, ...]
 
@@ -49,6 +50,7 @@ class MarketDataWriteRowSample:
             'volume': self.volume,
             'data_source': self.data_source,
             'warning_codes': '; '.join(self.warning_codes),
+            'validation_warnings': '; '.join(self.validation_warnings),
             'action': self.action,
             'reasons': '; '.join(self.reasons),
         }
@@ -85,6 +87,8 @@ class MarketDataWriteTestResult:
             'skipped_count': self.write_result.skipped_count,
             'invalid_row_count': self.write_result.invalid_row_count,
             'invalid_reasons': dict(self.write_result.invalid_reasons),
+            'tolerated_warning_count': sum(self.write_result.tolerated_warnings.values()),
+            'tolerated_warnings': dict(self.write_result.tolerated_warnings),
             'generated_at_utc': self.generated_at_utc,
         }
 
@@ -196,6 +200,7 @@ def _build_action_rows(
                 volume=fetch_row.volume,
                 data_source=fetch_row.data_source,
                 warning_codes=fetch_row.warning_codes,
+                validation_warnings=validation_row.validation_warnings,
                 action=_normalize_action(validation_row.action),
                 reasons=validation_row.reasons,
             )
@@ -237,6 +242,7 @@ def _render_summary_markdown(result: MarketDataWriteTestResult) -> str:
         f'- updated_count: {result.write_result.updated_count}',
         f'- skipped_count: {result.write_result.skipped_count}',
         f'- invalid_row_count: {result.write_result.invalid_row_count}',
+        f'- tolerated_warning_count: {sum(result.write_result.tolerated_warnings.values())}',
         '- Writes are limited to an explicit temporary test DB.',
         '- No legacy database access or writes were performed.',
         '',
@@ -245,6 +251,18 @@ def _render_summary_markdown(result: MarketDataWriteTestResult) -> str:
     ]
     if result.write_result.invalid_reasons:
         for reason, count in result.write_result.invalid_reasons.items():
+            lines.append(f'- {reason}: {count}')
+    else:
+        lines.append('- none')
+    lines.extend(
+        [
+            '',
+            '## Tolerated warnings',
+            '',
+        ]
+    )
+    if result.write_result.tolerated_warnings:
+        for reason, count in result.write_result.tolerated_warnings.items():
             lines.append(f'- {reason}: {count}')
     else:
         lines.append('- none')

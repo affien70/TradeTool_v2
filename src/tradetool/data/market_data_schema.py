@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
+RAW_CLOSE_BOUNDARY_ABSOLUTE_TOLERANCE = 0.10
+RAW_CLOSE_BOUNDARY_RELATIVE_TOLERANCE = 0.0025
 LEGACY_PRODUCTION_DB_PATH = Path('/Users/affien/DEV/TradeTool/portfolio.sqlite').resolve()
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REPO_TMP_DIR = REPO_ROOT / 'tmp'
@@ -26,9 +28,17 @@ CREATE TABLE IF NOT EXISTS {V2_PRICE_TABLE_NAME} (
     updated_at_utc TEXT NOT NULL CHECK (TRIM(updated_at_utc) <> ''),
     CHECK (raw_high IS NULL OR raw_low IS NULL OR raw_high >= raw_low),
     CHECK (raw_high IS NULL OR raw_open IS NULL OR raw_high >= raw_open),
-    CHECK (raw_high IS NULL OR raw_close IS NULL OR raw_high >= raw_close),
+    CHECK (
+        raw_high IS NULL OR raw_close IS NULL OR raw_high >= raw_close OR
+        raw_close - raw_high <= 0.10 OR
+        (raw_close - raw_high) / ABS(raw_close) <= 0.0025
+    ),
     CHECK (raw_low IS NULL OR raw_open IS NULL OR raw_low <= raw_open),
-    CHECK (raw_low IS NULL OR raw_close IS NULL OR raw_low <= raw_close),
+    CHECK (
+        raw_low IS NULL OR raw_close IS NULL OR raw_low <= raw_close OR
+        raw_low - raw_close <= 0.10 OR
+        (raw_low - raw_close) / ABS(raw_close) <= 0.0025
+    ),
     PRIMARY KEY (ticker, price_date, data_source)
 )
 """
@@ -77,6 +87,7 @@ class MarketDataDryRunValidationRow:
     data_source: str
     valid: bool
     reasons: tuple[str, ...]
+    validation_warnings: tuple[str, ...]
     action: str
 
     def to_dict(self) -> dict[str, object]:
@@ -86,6 +97,7 @@ class MarketDataDryRunValidationRow:
             'data_source': self.data_source,
             'valid': self.valid,
             'reasons': '; '.join(self.reasons),
+            'validation_warnings': '; '.join(self.validation_warnings),
             'action': self.action,
         }
 
@@ -95,6 +107,7 @@ class MarketDataDryRunResult:
     valid_row_count: int
     invalid_row_count: int
     invalid_reasons: Mapping[str, int]
+    tolerated_warnings: Mapping[str, int]
     would_insert: int
     would_update: int
     would_skip: int
@@ -110,6 +123,7 @@ class MarketDataWriteResult:
     skipped_count: int
     invalid_row_count: int
     invalid_reasons: Mapping[str, int]
+    tolerated_warnings: Mapping[str, int]
     rows: tuple[MarketDataDryRunValidationRow, ...]
 
 
@@ -132,6 +146,12 @@ class MarketDataSchemaInspectionResult:
             'columns': [column.to_dict() for column in self.columns],
             'indexes': list(self.indexes),
         }
+
+
+@dataclass(frozen=True, slots=True)
+class _MarketDataValidationResult:
+    reasons: tuple[str, ...]
+    warnings: tuple[str, ...]
 
 
 def validate_market_data_db_path(db_path: str | Path) -> Path:
@@ -206,25 +226,28 @@ def dry_run_market_data_rows(
     existing_rows = _load_existing_keys(resolved) if resolved.exists() else {}
     results: list[MarketDataDryRunValidationRow] = []
     invalid_reasons: Counter[str] = Counter()
+    tolerated_warnings: Counter[str] = Counter()
     would_insert = 0
     would_update = 0
     would_skip = 0
 
     for row in rows:
-        reasons = _validate_market_data_row(row)
-        if reasons:
-            invalid_reasons.update(reasons)
+        validation = _validate_market_data_row_with_warnings(row)
+        if validation.reasons:
+            invalid_reasons.update(validation.reasons)
             results.append(
                 MarketDataDryRunValidationRow(
                     ticker=row.ticker,
                     price_date=row.price_date,
                     data_source=row.data_source,
                     valid=False,
-                    reasons=reasons,
+                    reasons=validation.reasons,
+                    validation_warnings=validation.warnings,
                     action='invalid',
                 )
             )
             continue
+        tolerated_warnings.update(validation.warnings)
         existing = existing_rows.get(row.key())
         action = 'would_insert'
         if existing is not None:
@@ -245,6 +268,7 @@ def dry_run_market_data_rows(
                 data_source=row.data_source,
                 valid=True,
                 reasons=(),
+                validation_warnings=validation.warnings,
                 action=action,
             )
         )
@@ -252,6 +276,7 @@ def dry_run_market_data_rows(
         valid_row_count=sum(1 for row in results if row.valid),
         invalid_row_count=sum(1 for row in results if not row.valid),
         invalid_reasons=dict(sorted(invalid_reasons.items())),
+        tolerated_warnings=dict(sorted(tolerated_warnings.items())),
         would_insert=would_insert,
         would_update=would_update,
         would_skip=would_skip,
@@ -266,7 +291,7 @@ def _apply_market_data_rows_for_test(*, db_path: str | Path, rows: Sequence[Mark
     with sqlite3.connect(resolved) as connection:
         connection.execute(V2_PRICE_TABLE_DDL)
         for row in rows:
-            reasons = _validate_market_data_row(row)
+            reasons = _validate_market_data_row_with_warnings(row).reasons
             if reasons:
                 raise ValueError(f'Invalid market-data row for test write: {", ".join(reasons)}')
             connection.execute(
@@ -312,6 +337,7 @@ def write_market_data_rows_for_test(
             skipped_count=0,
             invalid_row_count=dry_run.invalid_row_count,
             invalid_reasons=dict(dry_run.invalid_reasons),
+            tolerated_warnings=dict(dry_run.tolerated_warnings),
             rows=dry_run.rows,
         )
 
@@ -340,12 +366,32 @@ def write_market_data_rows_for_test(
         skipped_count=dry_run.would_skip,
         invalid_row_count=0,
         invalid_reasons={},
+        tolerated_warnings=dict(dry_run.tolerated_warnings),
         rows=dry_run.rows,
     )
 
 
 def _validate_market_data_row(row: MarketDataRow) -> tuple[str, ...]:
+    return _validate_market_data_row_strict(row)
+
+
+def _validate_market_data_row_with_warnings(row: MarketDataRow) -> _MarketDataValidationResult:
+    reasons, warnings = _collect_market_data_row_reasons(row, tolerate_raw_close_boundary=True)
+    return _MarketDataValidationResult(reasons=reasons, warnings=warnings)
+
+
+def _validate_market_data_row_strict(row: MarketDataRow) -> tuple[str, ...]:
+    reasons, _warnings = _collect_market_data_row_reasons(row, tolerate_raw_close_boundary=False)
+    return reasons
+
+
+def _collect_market_data_row_reasons(
+    row: MarketDataRow,
+    *,
+    tolerate_raw_close_boundary: bool,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     reasons: list[str] = []
+    warnings: list[str] = []
     ticker = row.ticker.strip()
     price_date = row.price_date.strip()
     data_source = row.data_source.strip()
@@ -380,12 +426,41 @@ def _validate_market_data_row(row: MarketDataRow) -> tuple[str, ...]:
     if row.raw_high is not None and row.raw_open is not None and row.raw_high < row.raw_open:
         reasons.append('raw_high_lower_than_raw_open')
     if row.raw_high is not None and row.raw_close is not None and row.raw_high < row.raw_close:
-        reasons.append('raw_high_lower_than_raw_close')
+        if tolerate_raw_close_boundary and _raw_close_boundary_violation_is_tolerated(
+            boundary_value=row.raw_high,
+            raw_close=row.raw_close,
+            violation_amount=row.raw_close - row.raw_high,
+        ):
+            warnings.append('raw_high_lower_than_raw_close_tolerated')
+        else:
+            reasons.append('raw_high_lower_than_raw_close')
     if row.raw_low is not None and row.raw_open is not None and row.raw_low > row.raw_open:
         reasons.append('raw_low_higher_than_raw_open')
     if row.raw_low is not None and row.raw_close is not None and row.raw_low > row.raw_close:
-        reasons.append('raw_low_higher_than_raw_close')
-    return tuple(sorted(set(reasons)))
+        if tolerate_raw_close_boundary and _raw_close_boundary_violation_is_tolerated(
+            boundary_value=row.raw_low,
+            raw_close=row.raw_close,
+            violation_amount=row.raw_low - row.raw_close,
+        ):
+            warnings.append('raw_low_higher_than_raw_close_tolerated')
+        else:
+            reasons.append('raw_low_higher_than_raw_close')
+    return tuple(sorted(set(reasons))), tuple(sorted(set(warnings)))
+
+
+def _raw_close_boundary_violation_is_tolerated(
+    *,
+    boundary_value: float,
+    raw_close: float,
+    violation_amount: float,
+) -> bool:
+    if boundary_value <= 0 or raw_close <= 0 or violation_amount <= 0:
+        return False
+    relative_amount = violation_amount / abs(raw_close)
+    return (
+        violation_amount <= RAW_CLOSE_BOUNDARY_ABSOLUTE_TOLERANCE
+        or relative_amount <= RAW_CLOSE_BOUNDARY_RELATIVE_TOLERANCE
+    )
 
 
 def _load_existing_keys(db_path: Path) -> dict[tuple[str, str, str], tuple[object, ...]]:

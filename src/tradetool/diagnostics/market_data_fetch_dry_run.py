@@ -78,6 +78,8 @@ class MarketDataFetchDryRunResult:
             'valid_normalized_rows': self.dry_run.valid_row_count,
             'invalid_normalized_rows': self.dry_run.invalid_row_count,
             'invalid_reasons': dict(self.dry_run.invalid_reasons),
+            'tolerated_warning_count': sum(self.dry_run.tolerated_warnings.values()),
+            'tolerated_warnings': dict(self.dry_run.tolerated_warnings),
             'would_insert': self.dry_run.would_insert,
             'would_update': self.dry_run.would_update,
             'would_skip': self.dry_run.would_skip,
@@ -218,6 +220,7 @@ def _render_summary_markdown(result: MarketDataFetchDryRunResult) -> str:
         '',
         f'- Valid normalized rows: {result.dry_run.valid_row_count}',
         f'- Invalid normalized rows: {result.dry_run.invalid_row_count}',
+        f'- Tolerated validation warnings: {sum(result.dry_run.tolerated_warnings.values())}',
         f'- would_insert: {result.dry_run.would_insert}',
         f'- would_update: {result.dry_run.would_update}',
         f'- would_skip: {result.dry_run.would_skip}',
@@ -229,6 +232,18 @@ def _render_summary_markdown(result: MarketDataFetchDryRunResult) -> str:
     ]
     if result.dry_run.invalid_reasons:
         for reason, count in result.dry_run.invalid_reasons.items():
+            lines.append(f'- {reason}: {count}')
+    else:
+        lines.append('- none')
+    lines.extend(
+        [
+            '',
+            '## Tolerated warnings',
+            '',
+        ]
+    )
+    if result.dry_run.tolerated_warnings:
+        for reason, count in result.dry_run.tolerated_warnings.items():
             lines.append(f'- {reason}: {count}')
     else:
         lines.append('- none')

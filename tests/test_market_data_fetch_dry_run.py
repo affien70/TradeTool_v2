@@ -122,6 +122,40 @@ class MarketDataFetchDryRunTests(unittest.TestCase):
         )
         self.assertEqual(result.dry_run.invalid_row_count, 0)
 
+    def test_tolerated_raw_close_boundary_warning_is_reported_in_dry_run(self) -> None:
+        initialize_market_data_schema(self.db_path)
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(
+                        ticker='SNTIA.OL',
+                        raw_open=86.9,
+                        raw_high=87.0,
+                        raw_low=85.0999984741211,
+                        raw_close=85.0,
+                        adjusted_close=85.0,
+                    ),
+                ),
+                statuses=(TickerFetchStatus('SNTIA.OL', True, 1, 'fetched'),),
+            ),
+        )
+        result = build_market_data_fetch_dry_run(
+            db_path=self.db_path,
+            tickers=['SNTIA.OL'],
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 9),
+            source_name='synthetic',
+            source_override=source,
+        )
+        write_market_data_fetch_dry_run_outputs(result=result, out_dir=self.out_dir)
+        summary = json.loads((self.out_dir / 'market_data_fetch_dry_run_summary.json').read_text(encoding='utf-8'))
+        self.assertEqual(result.dry_run.invalid_row_count, 0)
+        self.assertEqual(result.dry_run.valid_row_count, 1)
+        self.assertEqual(result.dry_run.tolerated_warnings, {'raw_low_higher_than_raw_close_tolerated': 1})
+        self.assertEqual(summary['tolerated_warning_count'], 1)
+        self.assertEqual(summary['tolerated_warnings'], {'raw_low_higher_than_raw_close_tolerated': 1})
+
     def test_raw_ohlc_inversion_is_rejected_by_validator(self) -> None:
         initialize_market_data_schema(self.db_path)
         source = _SyntheticSource(

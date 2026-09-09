@@ -220,6 +220,43 @@ class MarketDataWriteTestTests(unittest.TestCase):
         self.assertEqual(result.write_result.invalid_row_count, 0)
         self.assertEqual(result.write_result.inserted_count, 1)
 
+    def test_tolerated_raw_close_boundary_warning_is_reported_and_written(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(
+                        ticker='SNTIA.OL',
+                        raw_open=86.9,
+                        raw_high=87.0,
+                        raw_low=85.0999984741211,
+                        raw_close=85.0,
+                        adjusted_close=85.0,
+                    ),
+                ),
+                statuses=(TickerFetchStatus('SNTIA.OL', True, 1, 'fetched'),),
+            ),
+        )
+        result = build_market_data_write_test_result(
+            db_path=self.db_path,
+            tickers=['SNTIA.OL'],
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 9),
+            source_name='synthetic',
+            allow_test_db_write=True,
+            source_override=source,
+        )
+        write_market_data_write_test_outputs(result=result, out_dir=self.out_dir)
+        summary = json.loads((self.out_dir / 'market_data_write_test_summary.json').read_text(encoding='utf-8'))
+        with (self.out_dir / 'written_rows_sample.csv').open('r', encoding='utf-8', newline='') as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(result.write_result.invalid_row_count, 0)
+        self.assertEqual(result.write_result.inserted_count, 1)
+        self.assertEqual(result.write_result.tolerated_warnings, {'raw_low_higher_than_raw_close_tolerated': 1})
+        self.assertEqual(summary['tolerated_warning_count'], 1)
+        self.assertEqual(summary['tolerated_warnings'], {'raw_low_higher_than_raw_close_tolerated': 1})
+        self.assertEqual(rows[0]['validation_warnings'], 'raw_low_higher_than_raw_close_tolerated')
+
     def test_legacy_production_db_path_is_refused(self) -> None:
         with self.assertRaises(ValueError):
             write_market_data_rows_for_test(

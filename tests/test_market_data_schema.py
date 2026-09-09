@@ -10,6 +10,8 @@ from pathlib import Path
 from tradetool.data.market_data_schema import (
     LEGACY_PRODUCTION_DB_PATH,
     MarketDataRow,
+    RAW_CLOSE_BOUNDARY_ABSOLUTE_TOLERANCE,
+    RAW_CLOSE_BOUNDARY_RELATIVE_TOLERANCE,
     V2_PRICE_TABLE_NAME,
     _apply_market_data_rows_for_test,
     dry_run_market_data_rows,
@@ -103,6 +105,66 @@ class MarketDataSchemaTests(unittest.TestCase):
         result = dry_run_market_data_rows(db_path=db_path, rows=[row])
         self.assertEqual(result.invalid_row_count, 1)
         self.assertIn('raw_high_lower_than_raw_low', result.invalid_reasons)
+
+    def test_small_raw_low_higher_than_raw_close_is_tolerated_with_warning(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_schema_tolerated_low_close.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        row = _sample_row(raw_open=86.9, raw_high=87.0, raw_low=85.0999984741211, raw_close=85.0, adjusted_close=85.0)
+        result = dry_run_market_data_rows(db_path=db_path, rows=[row])
+        self.assertEqual(RAW_CLOSE_BOUNDARY_ABSOLUTE_TOLERANCE, 0.10)
+        self.assertEqual(RAW_CLOSE_BOUNDARY_RELATIVE_TOLERANCE, 0.0025)
+        self.assertEqual(result.invalid_row_count, 0)
+        self.assertEqual(result.valid_row_count, 1)
+        self.assertEqual(result.tolerated_warnings, {'raw_low_higher_than_raw_close_tolerated': 1})
+        self.assertEqual(result.rows[0].validation_warnings, ('raw_low_higher_than_raw_close_tolerated',))
+        initialize_market_data_schema(db_path)
+        _apply_market_data_rows_for_test(db_path=db_path, rows=[row])
+        self.assertEqual(inspect_market_data_schema(db_path).row_count, 1)
+        db_path.unlink()
+
+    def test_small_raw_high_lower_than_raw_close_is_tolerated_with_warning(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_schema_tolerated_high_close.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        row = _sample_row(raw_open=104.0, raw_high=104.95, raw_low=99.0, raw_close=105.0, adjusted_close=105.0)
+        result = dry_run_market_data_rows(db_path=db_path, rows=[row])
+        self.assertEqual(result.invalid_row_count, 0)
+        self.assertEqual(result.tolerated_warnings, {'raw_high_lower_than_raw_close_tolerated': 1})
+        initialize_market_data_schema(db_path)
+        _apply_market_data_rows_for_test(db_path=db_path, rows=[row])
+        self.assertEqual(inspect_market_data_schema(db_path).row_count, 1)
+        db_path.unlink()
+
+    def test_large_raw_low_higher_than_raw_close_still_fails(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_schema_large_low_close.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        row = _sample_row(raw_open=86.5, raw_high=87.0, raw_low=86.0, raw_close=85.0, adjusted_close=85.0)
+        result = dry_run_market_data_rows(db_path=db_path, rows=[row])
+        self.assertEqual(result.invalid_row_count, 1)
+        self.assertEqual(result.tolerated_warnings, {})
+        self.assertIn('raw_low_higher_than_raw_close', result.invalid_reasons)
+
+    def test_large_raw_high_lower_than_raw_close_still_fails(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_schema_large_high_close.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        row = _sample_row(raw_open=103.0, raw_high=104.0, raw_low=99.0, raw_close=105.0, adjusted_close=105.0)
+        result = dry_run_market_data_rows(db_path=db_path, rows=[row])
+        self.assertEqual(result.invalid_row_count, 1)
+        self.assertEqual(result.tolerated_warnings, {})
+        self.assertIn('raw_high_lower_than_raw_close', result.invalid_reasons)
+
+    def test_open_outside_raw_high_low_is_not_tolerated(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_schema_open_outside.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        row = _sample_row(raw_open=105.05, raw_high=105.0, raw_low=99.0, raw_close=104.0)
+        result = dry_run_market_data_rows(db_path=db_path, rows=[row])
+        self.assertEqual(result.invalid_row_count, 1)
+        self.assertEqual(result.tolerated_warnings, {})
+        self.assertIn('raw_high_lower_than_raw_open', result.invalid_reasons)
 
     def test_nonpositive_adjusted_close_is_rejected(self) -> None:
         db_path = Path('/tmp/tradetool_v2_schema_nonpositive_adj.sqlite')
@@ -212,4 +274,3 @@ class MarketDataSchemaTests(unittest.TestCase):
         self.assertEqual(TRADE_POLICY_ENGINE_ID, 'trade_policy_v1_balanced_diagnostic')
         self.assertNotIn('holdings_signal', schema_source)
         self.assertNotIn('ml_score', schema_source)
-
