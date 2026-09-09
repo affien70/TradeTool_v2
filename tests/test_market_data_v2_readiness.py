@@ -19,7 +19,14 @@ from tradetool.policy.candidate_type import CANDIDATE_TYPE_ENGINE_ID
 from tradetool.policy.trade_policy import TRADE_POLICY_ENGINE_ID
 
 
-def _sample_v2_row(*, ticker: str, price_date: str, raw_close: float, adjusted_close: float, data_source: str = 'yahoo') -> MarketDataRow:
+def _sample_v2_row(
+    *,
+    ticker: str,
+    price_date: str,
+    raw_close: float,
+    adjusted_close: float,
+    data_source: str = 'yahoo',
+) -> MarketDataRow:
     return MarketDataRow(
         ticker=ticker,
         price_date=price_date,
@@ -48,6 +55,19 @@ def _seed_v2_rows(db_path: Path) -> None:
         day = (start + timedelta(days=index)).isoformat()
         rows.append(_sample_v2_row(ticker='GOD.OL', price_date=day, raw_close=50.0 + index, adjusted_close=55.0 + index))
     rows.append(_sample_v2_row(ticker='CAMBI.OL', price_date='2025-12-31', raw_close=999.0, adjusted_close=888.0, data_source='alt'))
+    write_market_data_rows_for_test(db_path=db_path, rows=rows, allow_test_db_write=True)
+
+
+def _seed_benchmark_lag_rows(db_path: Path, *, benchmark_rows: int = 252) -> None:
+    initialize_market_data_schema(db_path)
+    rows: list[MarketDataRow] = []
+    start = date(2025, 1, 1)
+    for index in range(260):
+        day = (start + timedelta(days=index)).isoformat()
+        rows.append(_sample_v2_row(ticker='CAMBI.OL', price_date=day, raw_close=100.0 + index, adjusted_close=80.0 + index))
+    for index in range(benchmark_rows):
+        day = (start + timedelta(days=index)).isoformat()
+        rows.append(_sample_v2_row(ticker='^OSEAX', price_date=day, raw_close=300.0 + index, adjusted_close=260.0 + index))
     write_market_data_rows_for_test(db_path=db_path, rows=rows, allow_test_db_write=True)
 
 
@@ -128,6 +148,55 @@ class MarketDataV2ReadinessTests(unittest.TestCase):
         self.assertNotEqual(row.latest_close, row.raw_close_latest)
         db_path.unlink()
 
+    def test_benchmark_older_than_ticker_can_be_feature_complete_when_aligned_history_is_enough(self) -> None:
+        db_path = self._db_path('tradetool_v2_readiness_lag_complete.sqlite')
+        _seed_benchmark_lag_rows(db_path, benchmark_rows=252)
+        result = build_market_data_v2_readiness(
+            db_path=db_path,
+            tickers=['CAMBI.OL'],
+            benchmark_ticker='^OSEAX',
+            data_source='yahoo',
+        )
+        row = result.feature_rows[0]
+        self.assertTrue(row.feature_complete)
+        self.assertEqual(row.benchmark_alignment_status, 'aligned_with_benchmark_lag')
+        self.assertTrue(row.benchmark_lag_warning)
+        db_path.unlink()
+
+    def test_common_aligned_max_date_is_used_as_feature_date_without_forward_fill(self) -> None:
+        db_path = self._db_path('tradetool_v2_readiness_common_date.sqlite')
+        _seed_benchmark_lag_rows(db_path, benchmark_rows=252)
+        result = build_market_data_v2_readiness(
+            db_path=db_path,
+            tickers=['CAMBI.OL'],
+            benchmark_ticker='^OSEAX',
+            data_source='yahoo',
+        )
+        row = result.feature_rows[0]
+        self.assertEqual(row.ticker_latest_date, '2025-09-17')
+        self.assertEqual(row.benchmark_latest_date, '2025-09-09')
+        self.assertEqual(row.common_aligned_max_date, '2025-09-09')
+        self.assertEqual(row.feature_date, '2025-09-09')
+        self.assertEqual(row.latest_price_date, '2025-09-09')
+        self.assertEqual(row.benchmark_alignment_gap_days, 8)
+        self.assertEqual(row.aligned_row_count, 252)
+        db_path.unlink()
+
+    def test_insufficient_aligned_rows_still_causes_feature_incomplete(self) -> None:
+        db_path = self._db_path('tradetool_v2_readiness_short_alignment.sqlite')
+        _seed_benchmark_lag_rows(db_path, benchmark_rows=251)
+        result = build_market_data_v2_readiness(
+            db_path=db_path,
+            tickers=['CAMBI.OL'],
+            benchmark_ticker='^OSEAX',
+            data_source='yahoo',
+        )
+        row = result.feature_rows[0]
+        self.assertFalse(row.feature_complete)
+        self.assertEqual(row.aligned_row_count, 251)
+        self.assertIn('insufficient_aligned_rows_for_12m_return', row.feature_missing_reasons)
+        db_path.unlink()
+
     def test_insufficient_v2_rows_are_reported_clearly(self) -> None:
         db_path = self._db_path('tradetool_v2_readiness_short.sqlite')
         _seed_v2_rows(db_path)
@@ -144,13 +213,16 @@ class MarketDataV2ReadinessTests(unittest.TestCase):
     def test_benchmark_missing_is_reported_clearly(self) -> None:
         db_path = self._db_path('tradetool_v2_readiness_missing_bm.sqlite')
         _seed_v2_rows(db_path)
-        with self.assertRaisesRegex(ValueError, 'Benchmark ticker "\\^MISSING" is missing from price_history_v2'):
-            build_market_data_v2_readiness(
-                db_path=db_path,
-                tickers=['CAMBI.OL'],
-                benchmark_ticker='^MISSING',
-                data_source='yahoo',
-            )
+        result = build_market_data_v2_readiness(
+            db_path=db_path,
+            tickers=['CAMBI.OL'],
+            benchmark_ticker='^MISSING',
+            data_source='yahoo',
+        )
+        self.assertFalse(result.benchmark_present)
+        self.assertFalse(result.feature_rows[0].feature_complete)
+        self.assertEqual(result.feature_rows[0].benchmark_alignment_status, 'benchmark_missing')
+        self.assertIn('missing_benchmark_data', result.missing_reason_counts)
         db_path.unlink()
 
     def test_cli_writes_only_expected_report_files(self) -> None:
@@ -241,6 +313,7 @@ class MarketDataV2ReadinessTests(unittest.TestCase):
             rows = list(csv.DictReader(handle))
         self.assertEqual(summary['feature_complete_count'], 1)
         self.assertEqual(rows[0]['close_input_source'], 'adjusted_close')
+        self.assertIn('benchmark_lag_warning', rows[0])
         db_path.unlink()
         for child in out_dir.iterdir():
             child.unlink()
