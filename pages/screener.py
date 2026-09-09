@@ -11,19 +11,44 @@ from tradetool.ui.screener import (
 )
 
 
+def _parse_ticker_text(value: str) -> list[str]:
+    return [token.strip().upper() for token in value.replace(',', ' ').split() if token.strip()]
+
+
 def render() -> None:
     st.title('Screener')
     st.write('Kjør den nåværende diagnostiske v2-screenerkjeden manuelt for å inspisere rangerte kandidater, trade signal og candidate type.')
     st.info('Dette er kun diagnostisk beslutningsstøtte. Resultatet er ikke produksjonsråd eller automatisk handelslogikk.')
 
+    price_source_label = st.radio(
+        'Prisdatasource',
+        options=['Legacy price_history', 'V2 price_history_v2'],
+        index=0,
+        horizontal=True,
+    )
     database_path = st.text_input('Lokal kopi av SQLite-database', value='', placeholder='/tmp/portfolio_copy.sqlite')
-    universe_id = st.text_input('Universe ID', value='NORWAY_V2')
-    benchmark_ticker = st.text_input('Benchmark ticker', value='^OSEAX')
+    if price_source_label == 'V2 price_history_v2':
+        st.warning('V2 price_history_v2 er kun test/diagnostisk markedsdata. UI-en kan ikke oppdatere eller skrive data.')
+        universe_id = st.text_input('Universe ID', value='EXPLICIT_V2_TEST')
+        explicit_ticker_text = st.text_area('Tickere for v2-test', value='CAMBI.OL SNTIA.OL GOD.OL')
+        benchmark_ticker = st.text_input('Benchmark ticker', value='OSEBX.OL')
+        data_source = st.text_input('V2 data_source', value='yahoo')
+        price_table = 'price_history_v2'
+    else:
+        universe_id = st.text_input('Universe ID', value='NORWAY_V2')
+        explicit_ticker_text = ''
+        benchmark_ticker = st.text_input('Benchmark ticker', value='^OSEAX')
+        data_source = 'yahoo'
+        price_table = 'price_history'
     show_avoid = st.checkbox('Vis AVOID-rader', value=False)
 
     if st.button('Kjør diagnostisk screener'):
         if not database_path.strip():
             st.warning('Oppgi en lokal databasebane før du kjører screeneren.')
+            return
+        explicit_tickers = _parse_ticker_text(explicit_ticker_text) if price_table == 'price_history_v2' else None
+        if price_table == 'price_history_v2' and not explicit_tickers:
+            st.warning('Oppgi minst én ticker for v2 price_history_v2-modus.')
             return
 
         try:
@@ -31,11 +56,16 @@ def render() -> None:
                 db_path=Path(database_path.strip()),
                 universe_id=universe_id.strip() or 'NORWAY_V2',
                 benchmark_ticker=benchmark_ticker.strip() or None,
+                explicit_tickers=explicit_tickers,
+                price_table=price_table,
+                data_source=data_source.strip() or 'yahoo',
             )
             st.session_state['screener_result'] = result
             st.session_state['screener_db_path'] = database_path.strip()
             st.session_state['screener_universe_id'] = universe_id.strip() or 'NORWAY_V2'
             st.session_state['screener_benchmark_ticker'] = benchmark_ticker.strip() or None
+            st.session_state['screener_price_table'] = price_table
+            st.session_state['screener_data_source'] = data_source.strip() or 'yahoo'
         except Exception as exc:  # pragma: no cover
             st.error(str(exc))
             return
@@ -46,6 +76,8 @@ def render() -> None:
 
     current_db_path = st.session_state.get('screener_db_path', database_path.strip())
     current_benchmark = st.session_state.get('screener_benchmark_ticker', benchmark_ticker.strip() or None)
+    current_price_table = st.session_state.get('screener_price_table', price_table)
+    current_data_source = st.session_state.get('screener_data_source', data_source)
 
     st.subheader('Kjøreoppsummering')
     summary_columns = st.columns(5)
@@ -60,6 +92,11 @@ def render() -> None:
             'universe_id': result.universe_id,
             'universe_source': result.universe_source,
             'benchmark_ticker': result.benchmark_ticker,
+            'price_table': result.price_table,
+            'data_source': result.data_source,
+            'close_input_source': result.close_input_source,
+            'benchmark_alignment_date': result.benchmark_alignment_date,
+            'benchmark_lag_warning_count': result.benchmark_lag_warning_count,
             'ranking_engine_id': result.ranking_engine_id,
             'policy_engine_id': result.policy_engine_id,
             'classification_engine_id': result.classification_engine_id,
@@ -88,6 +125,8 @@ def render() -> None:
             db_path=Path(current_db_path),
             ticker=detail.ticker,
             benchmark_ticker=current_benchmark,
+            price_table=current_price_table,
+            data_source=current_data_source,
         )
 
         detail_columns = st.columns(4)

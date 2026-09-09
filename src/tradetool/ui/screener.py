@@ -6,10 +6,24 @@ from dataclasses import dataclass
 import math
 from pathlib import Path
 
-from tradetool.data import ReadOnlySQLite, load_price_history_for_tickers
+from tradetool.data import ReadOnlySQLite, load_price_history_for_tickers, load_price_history_v2_for_tickers
 from tradetool.diagnostics.candidate_type import build_candidate_type_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
 from tradetool.diagnostics.feature_readiness import build_feature_readiness_diagnostics
+from tradetool.diagnostics.market_data_v2_readiness import build_market_data_v2_readiness
+from tradetool.policy import (
+    CANDIDATE_TYPE_ENGINE_ID,
+    CandidateTypeInputRow,
+    TRADE_POLICY_ENGINE_ID,
+    TradePolicyInputRow,
+    apply_candidate_type_diagnostics,
+    apply_trade_policy_diagnostics,
+    summarize_candidate_types,
+)
+from tradetool.ranking import BASELINE_RANKING_ENGINE_ID, BaselineRankingInput, build_baseline_ranking
+
+PRICE_TABLE_LEGACY = 'price_history'
+PRICE_TABLE_V2 = 'price_history_v2'
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +107,11 @@ class MinimalScreenerResult:
     universe_id: str
     universe_source: str
     benchmark_ticker: str | None
+    price_table: str
+    data_source: str | None
+    close_input_source: str
+    benchmark_alignment_date: str | None
+    benchmark_lag_warning_count: int
     ranking_engine_id: str
     policy_engine_id: str
     classification_engine_id: str
@@ -170,13 +189,26 @@ def build_minimal_screener_result(
     db_path: str | Path,
     universe_id: str,
     benchmark_ticker: str | None = None,
+    explicit_tickers: Sequence[str] | None = None,
     price_table: str = 'price_history',
+    data_source: str = 'yahoo',
     min_history_rows: int = 252,
     freshness_tolerance_days: int = 0,
 ) -> MinimalScreenerResult:
+    if price_table == PRICE_TABLE_V2:
+        return _build_v2_minimal_screener_result(
+            db_path=db_path,
+            universe_id=universe_id,
+            benchmark_ticker=benchmark_ticker,
+            explicit_tickers=explicit_tickers,
+            data_source=data_source,
+            min_history_rows=min_history_rows,
+        )
+
     eligibility = build_eligibility_diagnostics(
         db_path=db_path,
         universe_id=universe_id,
+        explicit_tickers=explicit_tickers,
         price_table=price_table,
         min_history_rows=min_history_rows,
         freshness_tolerance_days=freshness_tolerance_days,
@@ -185,6 +217,7 @@ def build_minimal_screener_result(
         db_path=db_path,
         universe_id=universe_id,
         benchmark_ticker=benchmark_ticker,
+        explicit_tickers=explicit_tickers,
         price_table=price_table,
         min_history_rows=min_history_rows,
         freshness_tolerance_days=freshness_tolerance_days,
@@ -193,6 +226,7 @@ def build_minimal_screener_result(
         db_path=db_path,
         universe_id=universe_id,
         benchmark_ticker=benchmark_ticker,
+        explicit_tickers=explicit_tickers,
         price_table=price_table,
         min_history_rows=min_history_rows,
         freshness_tolerance_days=freshness_tolerance_days,
@@ -202,6 +236,11 @@ def build_minimal_screener_result(
         universe_id=universe_id,
         universe_source=candidate.policy.ranking.universe_source,
         benchmark_ticker=benchmark_ticker,
+        price_table=price_table,
+        data_source=None,
+        close_input_source='close',
+        benchmark_alignment_date=None,
+        benchmark_lag_warning_count=0,
         ranking_engine_id=candidate.policy.ranking.ranking_engine_id,
         policy_engine_id=candidate.policy.policy_engine_id,
         classification_engine_id=candidate.classification_engine_id,
@@ -220,22 +259,129 @@ def build_minimal_screener_result(
     )
 
 
+def _build_v2_minimal_screener_result(
+    *,
+    db_path: str | Path,
+    universe_id: str,
+    benchmark_ticker: str | None,
+    explicit_tickers: Sequence[str] | None,
+    data_source: str,
+    min_history_rows: int,
+) -> MinimalScreenerResult:
+    tickers = _normalize_explicit_tickers(explicit_tickers)
+    if not tickers:
+        raise ValueError('V2 price_history_v2 mode requires explicit tickers for this diagnostic phase.')
+    readiness = build_market_data_v2_readiness(
+        db_path=db_path,
+        tickers=list(tickers),
+        benchmark_ticker=benchmark_ticker,
+        data_source=data_source,
+        min_history_rows=min_history_rows,
+    )
+    complete_rows = [row for row in readiness.feature_rows if row.feature_complete]
+    ranked = build_baseline_ranking(
+        tuple(
+            BaselineRankingInput(
+                ticker=row.ticker,
+                rank_date=_rank_date_from_feature_row(row),
+                features=row.features,
+            )
+            for row in complete_rows
+        )
+    )
+    policy_rows = apply_trade_policy_diagnostics(
+        tuple(
+            TradePolicyInputRow(
+                ticker=row.ranked_candidate.ticker,
+                rank_date=row.ranked_candidate.rank_date.isoformat(),
+                ranking_engine_id=row.ranked_candidate.ranking_engine_id,
+                raw_rank=row.ranked_candidate.raw_rank,
+                raw_score=row.ranked_candidate.raw_score,
+                input_fields=row.input_fields,
+            )
+            for row in ranked
+        )
+    )
+    candidate_rows = apply_candidate_type_diagnostics(
+        tuple(
+            CandidateTypeInputRow(
+                ticker=row.ticker,
+                rank_date=row.rank_date,
+                ranking_engine_id=row.ranking_engine_id,
+                policy_engine_id=row.policy_engine_id,
+                raw_rank=row.raw_rank,
+                raw_score=row.raw_score,
+                trade_signal=row.trade_signal,
+                policy_pass=row.policy_pass,
+                policy_reasons=row.policy_reasons,
+                policy_warnings=row.policy_warnings,
+                above_sma50=row.above_sma50,
+                above_sma200=row.above_sma200,
+                positive_return_3m=row.positive_return_3m,
+                positive_return_6m=row.positive_return_6m,
+                positive_rs_3m=row.positive_rs_3m,
+                positive_rs_6m=row.positive_rs_6m,
+                acceptable_drawdown=row.acceptable_drawdown,
+                acceptable_volatility=row.acceptable_volatility,
+                acceptable_traded_value=row.acceptable_traded_value,
+                moderate_stretch=row.moderate_stretch,
+                severe_stretch=row.severe_stretch,
+                drawdown_252=row.drawdown_252,
+                volatility_63=row.volatility_63,
+                average_traded_value_20=row.average_traded_value_20,
+                distance_to_sma50=row.distance_to_sma50,
+                distance_to_sma200=row.distance_to_sma200,
+            )
+            for row in policy_rows
+        )
+    )
+    rows = _build_table_rows_from_sequences(candidate_rows, policy_rows, ranked)
+    candidate_summary = summarize_candidate_types(candidate_rows)
+    return MinimalScreenerResult(
+        universe_id=universe_id,
+        universe_source='explicit_tickers',
+        benchmark_ticker=benchmark_ticker,
+        price_table=PRICE_TABLE_V2,
+        data_source=data_source,
+        close_input_source='adjusted_close',
+        benchmark_alignment_date=_common_v2_alignment_date(readiness.feature_rows),
+        benchmark_lag_warning_count=readiness.benchmark_lag_warning_count,
+        ranking_engine_id=BASELINE_RANKING_ENGINE_ID,
+        policy_engine_id=TRADE_POLICY_ENGINE_ID,
+        classification_engine_id=CANDIDATE_TYPE_ENGINE_ID,
+        input_universe_count=len(tickers),
+        structural_eligible_count=readiness.enough_history_count,
+        structural_rejected_count=len(tickers) - readiness.enough_history_count,
+        feature_complete_count=readiness.feature_complete_count,
+        feature_incomplete_count=readiness.feature_incomplete_count,
+        ranked_count=len(rows),
+        trade_signal_counts=candidate_summary['trade_signal_counts'],
+        candidate_type_counts=candidate_summary['candidate_type_counts'],
+        structural_rejection_counts_by_reason={},
+        feature_missing_reason_counts=readiness.missing_reason_counts,
+        signal_type_matrix=_build_signal_type_matrix(candidate_rows),
+        rows=rows,
+    )
+
+
 def _build_table_rows(candidate) -> tuple[MinimalScreenerTableRow, ...]:
+    return _build_table_rows_from_sequences(candidate.rows, candidate.policy.rows, candidate.policy.ranking.rows)
+
+
+def _build_table_rows_from_sequences(candidate_rows, policy_rows, ranking_rows) -> tuple[MinimalScreenerTableRow, ...]:
     rows: list[MinimalScreenerTableRow] = []
-    for candidate_row, policy_row, ranking_row in zip(
-        candidate.rows,
-        candidate.policy.rows,
-        candidate.policy.ranking.rows,
-        strict=True,
-    ):
+    for candidate_row, policy_row, ranking_row in zip(candidate_rows, policy_rows, ranking_rows, strict=True):
+        ranking_ticker = ranking_row.ticker if hasattr(ranking_row, 'ticker') else ranking_row.ranked_candidate.ticker
+        ranking_raw_rank = ranking_row.raw_rank if hasattr(ranking_row, 'raw_rank') else ranking_row.ranked_candidate.raw_rank
+        ranking_input_fields = ranking_row.input_fields
         if (
             candidate_row.ticker != policy_row.ticker or
-            candidate_row.ticker != ranking_row.ticker or
+            candidate_row.ticker != ranking_ticker or
             candidate_row.raw_rank != policy_row.raw_rank or
-            candidate_row.raw_rank != ranking_row.raw_rank
+            candidate_row.raw_rank != ranking_raw_rank
         ):
             raise ValueError('Candidate-type rows, policy rows, and ranking rows are not aligned.')
-        features = ranking_row.input_fields
+        features = ranking_input_fields
         rows.append(
             MinimalScreenerTableRow(
                 raw_rank=candidate_row.raw_rank,
@@ -321,17 +467,23 @@ def build_selected_ticker_chart_detail(
     benchmark_ticker: str | None,
     lookback_rows: int = 252,
     price_table: str = 'price_history',
+    data_source: str = 'yahoo',
 ) -> SelectedTickerChartDetail:
     database = ReadOnlySQLite(db_path)
     tickers = [ticker]
     if benchmark_ticker:
         tickers.append(benchmark_ticker)
-    loaded = load_price_history_for_tickers(database=database, tickers=tickers, price_table=price_table)
-    ticker_rows = list(loaded.rows_by_ticker.get(ticker.upper(), ()))
+    if price_table == PRICE_TABLE_V2:
+        loaded = load_price_history_v2_for_tickers(db_path=str(db_path), tickers=tickers, data_source=data_source, database=database)
+        loaded_rows_by_ticker = loaded.as_feature_rows_by_ticker()
+    else:
+        loaded = load_price_history_for_tickers(database=database, tickers=tickers, price_table=price_table)
+        loaded_rows_by_ticker = loaded.rows_by_ticker
+    ticker_rows = list(loaded_rows_by_ticker.get(ticker.upper(), ()))
     if not ticker_rows:
         raise ValueError(f'Mangler prisdata for valgt ticker: {ticker}')
     limited_rows = ticker_rows[-lookback_rows:]
-    benchmark_rows = list(loaded.rows_by_ticker.get(benchmark_ticker.upper(), ())) if benchmark_ticker else []
+    benchmark_rows = list(loaded_rows_by_ticker.get(benchmark_ticker.upper(), ())) if benchmark_ticker else []
     benchmark_by_date = {row.price_date.isoformat(): row.close for row in benchmark_rows}
 
     if benchmark_ticker and not benchmark_rows:
@@ -340,7 +492,7 @@ def build_selected_ticker_chart_detail(
             benchmark_ticker=benchmark_ticker,
             lookback_rows=lookback_rows,
             price_points=_build_price_points(limited_rows, benchmark_by_date={}),
-            loaded_tickers=tuple(sorted(loaded.rows_by_ticker)),
+            loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
             warning=f'Mangler benchmark-data for {benchmark_ticker}. Viser kun prisserien for valgt ticker.',
         )
 
@@ -351,7 +503,7 @@ def build_selected_ticker_chart_detail(
             benchmark_ticker=benchmark_ticker,
             lookback_rows=lookback_rows,
             price_points=_build_price_points(limited_rows, benchmark_by_date={}),
-            loaded_tickers=tuple(sorted(loaded.rows_by_ticker)),
+            loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
             warning=f'Kunne ikke justere datoer mellom {ticker.upper()} og {benchmark_ticker}.',
         )
 
@@ -367,7 +519,7 @@ def build_selected_ticker_chart_detail(
         benchmark_ticker=benchmark_ticker,
         lookback_rows=lookback_rows,
         price_points=_build_price_points(filtered_rows, benchmark_by_date=filtered_benchmark),
-        loaded_tickers=tuple(sorted(loaded.rows_by_ticker)),
+        loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
         warning=None,
     )
 
@@ -386,6 +538,25 @@ def _as_optional_str(value: float | int | bool | str | None) -> str | None:
     if isinstance(value, str):
         return value
     return None
+
+
+def _normalize_explicit_tickers(tickers: Sequence[str] | None) -> tuple[str, ...]:
+    if tickers is None:
+        return ()
+    return tuple(dict.fromkeys(str(ticker).strip().upper() for ticker in tickers if str(ticker).strip()))
+
+
+def _rank_date_from_feature_row(row) -> object:
+    from datetime import date
+
+    if isinstance(row.feature_date, date):
+        return row.feature_date
+    return date.fromisoformat(str(row.feature_date))
+
+
+def _common_v2_alignment_date(feature_rows: Sequence) -> str | None:
+    dates = [row.common_aligned_max_date for row in feature_rows if getattr(row, 'common_aligned_max_date', None)]
+    return min(dates) if dates else None
 
 
 def _build_price_points(rows, *, benchmark_by_date: Mapping[str, float]) -> tuple[ScreenerChartPoint, ...]:

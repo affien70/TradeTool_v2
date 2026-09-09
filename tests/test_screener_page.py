@@ -49,7 +49,13 @@ class _StreamlitStub:
     def checkbox(self, *args, **kwargs) -> bool:
         return False
 
+    def radio(self, label: str, options, index: int = 0, **kwargs):
+        return options[index]
+
     def text_input(self, label: str, value: str = '', **kwargs) -> str:
+        return value
+
+    def text_area(self, label: str, value: str = '', **kwargs) -> str:
         return value
 
     def button(self, *args, **kwargs) -> bool:

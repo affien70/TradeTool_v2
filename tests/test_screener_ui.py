@@ -6,6 +6,7 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
+from tradetool.data.market_data_schema import MarketDataRow, initialize_market_data_schema, write_market_data_rows_for_test
 from tradetool.policy.candidate_type import CANDIDATE_TYPE_ENGINE_ID
 from tradetool.policy.trade_policy import (
     MAX_ACCEPTABLE_VOLATILITY,
@@ -22,6 +23,8 @@ from tradetool.policy.trade_policy import (
     TRADE_POLICY_ENGINE_ID,
 )
 from tradetool.ui.screener import (
+    PRICE_TABLE_LEGACY,
+    PRICE_TABLE_V2,
     build_minimal_screener_result,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
@@ -59,6 +62,43 @@ def _build_fixture_db(path: Path) -> None:
         )
 
 
+def _sample_v2_row(
+    *,
+    ticker: str,
+    price_date: str,
+    raw_close: float,
+    adjusted_close: float,
+    volume: float = 1000.0,
+    data_source: str = 'yahoo',
+) -> MarketDataRow:
+    return MarketDataRow(
+        ticker=ticker,
+        price_date=price_date,
+        raw_open=raw_close,
+        raw_high=raw_close + 1.0,
+        raw_low=raw_close - 1.0,
+        raw_close=raw_close,
+        adjusted_close=adjusted_close,
+        volume=volume,
+        data_source=data_source,
+        created_at_utc='2026-09-09T00:00:00Z',
+        updated_at_utc='2026-09-09T00:00:00Z',
+    )
+
+
+def _build_fixture_v2_db(path: Path) -> None:
+    initialize_market_data_schema(path)
+    rows: list[MarketDataRow] = []
+    start = date(2025, 1, 1)
+    for index in range(260):
+        day = (start + timedelta(days=index)).isoformat()
+        rows.append(_sample_v2_row(ticker='CAMBI.OL', price_date=day, raw_close=100.0 + index, adjusted_close=80.0 + index, volume=2000.0 + index))
+        rows.append(_sample_v2_row(ticker='SNTIA.OL', price_date=day, raw_close=120.0 + index, adjusted_close=90.0 + index, volume=2200.0 + index))
+        rows.append(_sample_v2_row(ticker='GOD.OL', price_date=day, raw_close=140.0 + index, adjusted_close=100.0 + index, volume=2400.0 + index))
+        rows.append(_sample_v2_row(ticker='OSEBX.OL', price_date=day, raw_close=300.0 + index, adjusted_close=260.0 + index, volume=4000.0 + index))
+    write_market_data_rows_for_test(db_path=path, rows=rows, allow_test_db_write=True)
+
+
 class ScreenerUiOrchestrationTests(unittest.TestCase):
     def test_orchestration_returns_expected_summary_from_synthetic_db(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -66,6 +106,8 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             _build_fixture_db(db_path)
             result = build_minimal_screener_result(db_path=db_path, universe_id='NORWAY_V2', benchmark_ticker='^OSEAX')
             self.assertEqual(result.universe_source, 'universe_cache:NORWAY_V2')
+            self.assertEqual(result.price_table, PRICE_TABLE_LEGACY)
+            self.assertEqual(result.close_input_source, 'close')
             self.assertEqual(result.input_universe_count, 5)
             self.assertEqual(result.ranked_count, len(result.rows))
             self.assertEqual(result.policy_engine_id, TRADE_POLICY_ENGINE_ID)
@@ -179,3 +221,86 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             _build_fixture_db(db_path)
             chart = build_selected_ticker_chart_detail(db_path=db_path, ticker='LEADER.OL', benchmark_ticker='^MISSING')
             self.assertIsNotNone(chart.warning)
+
+    def test_v2_mode_runs_with_explicit_tickers_without_universe_cache(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_explicit.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        result = build_minimal_screener_result(
+            db_path=db_path,
+            universe_id='EXPLICIT_V2_TEST',
+            explicit_tickers=['CAMBI.OL', 'SNTIA.OL', 'GOD.OL'],
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        self.assertEqual(result.universe_source, 'explicit_tickers')
+        self.assertEqual(result.price_table, PRICE_TABLE_V2)
+        self.assertEqual(result.data_source, 'yahoo')
+        self.assertEqual(result.close_input_source, 'adjusted_close')
+        self.assertEqual(result.input_universe_count, 3)
+        self.assertEqual(result.feature_complete_count, 3)
+        self.assertEqual(result.ranked_count, 3)
+        db_path.unlink()
+
+    def test_v2_mode_maps_adjusted_close_to_latest_close_and_keeps_no_ml_or_holdings_output(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_adjusted.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        result = build_minimal_screener_result(
+            db_path=db_path,
+            universe_id='EXPLICIT_V2_TEST',
+            explicit_tickers=['CAMBI.OL'],
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        row = result.rows[0].to_dict()
+        self.assertEqual(row['latest_close'], 339.0)
+        self.assertNotIn('ml_score', row)
+        self.assertNotIn('holdings_signal', row)
+        db_path.unlink()
+
+    def test_v2_chart_uses_price_history_v2_reader_and_adjusted_close(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        self.assertEqual(set(chart.loaded_tickers), {'CAMBI.OL', 'OSEBX.OL'})
+        self.assertEqual(chart.price_points[-1].close, 339.0)
+        self.assertIsNone(chart.warning)
+        db_path.unlink()
+
+    def test_v2_mode_does_not_write_to_database(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_nowrite.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        before = initialize_market_data_schema(db_path).row_count
+        build_minimal_screener_result(
+            db_path=db_path,
+            universe_id='EXPLICIT_V2_TEST',
+            explicit_tickers=['CAMBI.OL'],
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        after = initialize_market_data_schema(db_path).row_count
+        self.assertEqual(before, after)
+        db_path.unlink()
