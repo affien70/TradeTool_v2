@@ -200,6 +200,247 @@ class MarketDataWriteTestTests(unittest.TestCase):
         self.assertIn('raw_high_lower_than_raw_low', result.write_result.invalid_reasons)
         self.assertEqual(inspection.row_count, 0)
 
+    def test_default_mode_with_invalid_row_writes_zero_rows(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(ticker='CAMBI.OL'),
+                    _sample_source_row(ticker='BMA.OL', raw_high=98.0, raw_close=104.0),
+                ),
+                statuses=(
+                    TickerFetchStatus('CAMBI.OL', True, 1, 'fetched'),
+                    TickerFetchStatus('BMA.OL', True, 1, 'fetched'),
+                ),
+            ),
+        )
+        result = build_market_data_write_test_result(
+            db_path=self.db_path,
+            tickers=['CAMBI.OL', 'BMA.OL'],
+            start_date=date(2026, 6, 19),
+            end_date=date(2026, 8, 17),
+            source_name='synthetic',
+            allow_test_db_write=True,
+            source_override=source,
+        )
+        summary = result.to_summary_dict()
+        inspection = inspect_market_data_schema(self.db_path)
+        self.assertFalse(summary['partial_invalid_skip_enabled'])
+        self.assertEqual(result.write_result.inserted_count, 0)
+        self.assertEqual(result.write_result.invalid_row_count, 1)
+        self.assertEqual(summary['invalid_rows_blocked_default_write'], 1)
+        self.assertEqual(summary['invalid_rows_skipped_partial_write'], 0)
+        self.assertEqual(summary['skipped_invalid_tickers'], [])
+        self.assertEqual(inspection.row_count, 0)
+
+    def test_partial_mode_with_invalid_row_writes_valid_rows_only(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(ticker='CAMBI.OL'),
+                    _sample_source_row(ticker='BMA.OL', raw_high=98.0, raw_close=104.0),
+                    _sample_source_row(ticker='SNTIA.OL', raw_open=110.0, raw_high=111.0, raw_low=109.0, raw_close=110.5),
+                ),
+                statuses=(
+                    TickerFetchStatus('CAMBI.OL', True, 1, 'fetched'),
+                    TickerFetchStatus('BMA.OL', True, 1, 'fetched'),
+                    TickerFetchStatus('SNTIA.OL', True, 1, 'fetched'),
+                ),
+            ),
+        )
+        result = build_market_data_write_test_result(
+            db_path=self.db_path,
+            tickers=['CAMBI.OL', 'BMA.OL', 'SNTIA.OL'],
+            start_date=date(2026, 6, 19),
+            end_date=date(2026, 8, 17),
+            source_name='synthetic',
+            allow_test_db_write=True,
+            allow_partial_invalid_skip=True,
+            source_override=source,
+        )
+        summary = result.to_summary_dict()
+        inspection = inspect_market_data_schema(self.db_path)
+        with sqlite3.connect(self.db_path) as connection:
+            written_tickers = tuple(
+                row[0]
+                for row in connection.execute(
+                    f'SELECT ticker FROM {V2_PRICE_TABLE_NAME} ORDER BY ticker'
+                ).fetchall()
+            )
+        self.assertTrue(summary['partial_invalid_skip_enabled'])
+        self.assertEqual(result.write_result.inserted_count, 2)
+        self.assertEqual(result.write_result.invalid_row_count, 1)
+        self.assertEqual(summary['skipped_invalid_row_count'], 1)
+        self.assertEqual(summary['skipped_invalid_tickers'], ['BMA.OL'])
+        self.assertEqual(summary['written_valid_row_count'], 2)
+        self.assertEqual(summary['invalid_rows_blocked_default_write'], 0)
+        self.assertEqual(summary['invalid_rows_skipped_partial_write'], 1)
+        self.assertEqual(inspection.row_count, 2)
+        self.assertEqual(written_tickers, ('CAMBI.OL', 'SNTIA.OL'))
+
+    def test_partial_mode_requires_explicit_allow_test_db_write(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(_sample_source_row(),),
+                statuses=(TickerFetchStatus('CAMBI.OL', True, 1, 'fetched'),),
+            ),
+        )
+        with self.assertRaises(ValueError):
+            build_market_data_write_test_result(
+                db_path=self.db_path,
+                tickers=['CAMBI.OL'],
+                start_date=date(2026, 6, 19),
+                end_date=date(2026, 8, 17),
+                source_name='synthetic',
+                allow_test_db_write=False,
+                allow_partial_invalid_skip=True,
+                source_override=source,
+            )
+        with self.assertRaises(SystemExit):
+            market_data_write_test_cli_main([
+                '--db-path', str(self.db_path),
+                '--tickers', 'CAMBI.OL',
+                '--start-date', '2026-06-19',
+                '--source', 'synthetic',
+                '--allow-partial-invalid-skip',
+                '--out-dir', str(self.out_dir),
+            ])
+
+    def test_partial_mode_still_refuses_legacy_production_db_path(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(_sample_source_row(),),
+                statuses=(TickerFetchStatus('CAMBI.OL', True, 1, 'fetched'),),
+            ),
+        )
+        with self.assertRaises(ValueError):
+            build_market_data_write_test_result(
+                db_path=LEGACY_PRODUCTION_DB_PATH,
+                tickers=['CAMBI.OL'],
+                start_date=date(2026, 6, 19),
+                end_date=date(2026, 8, 17),
+                source_name='synthetic',
+                allow_test_db_write=True,
+                allow_partial_invalid_skip=True,
+                source_override=source,
+            )
+
+    def test_partial_mode_does_not_relax_validation_or_write_invalid_rows(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(ticker='CAMBI.OL', raw_high=98.0, raw_low=99.0),
+                    _sample_source_row(ticker='BMA.OL', raw_high=98.0, raw_close=104.0),
+                ),
+                statuses=(
+                    TickerFetchStatus('CAMBI.OL', True, 1, 'fetched'),
+                    TickerFetchStatus('BMA.OL', True, 1, 'fetched'),
+                ),
+            ),
+        )
+        result = build_market_data_write_test_result(
+            db_path=self.db_path,
+            tickers=['CAMBI.OL', 'BMA.OL'],
+            start_date=date(2026, 6, 19),
+            end_date=date(2026, 8, 17),
+            source_name='synthetic',
+            allow_test_db_write=True,
+            allow_partial_invalid_skip=True,
+            source_override=source,
+        )
+        inspection = inspect_market_data_schema(self.db_path)
+        self.assertEqual(result.write_result.invalid_row_count, 2)
+        self.assertEqual(result.write_result.inserted_count, 0)
+        self.assertIn('raw_high_lower_than_raw_low', result.write_result.invalid_reasons)
+        self.assertIn('raw_high_lower_than_raw_close', result.write_result.invalid_reasons)
+        self.assertEqual(inspection.row_count, 0)
+
+    def test_partial_mode_writes_tolerated_warning_rows_and_reports_warnings(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(
+                        ticker='SNTIA.OL',
+                        raw_open=86.9,
+                        raw_high=87.0,
+                        raw_low=85.0999984741211,
+                        raw_close=85.0,
+                        adjusted_close=85.0,
+                    ),
+                    _sample_source_row(ticker='BMA.OL', raw_high=98.0, raw_close=104.0),
+                ),
+                statuses=(
+                    TickerFetchStatus('SNTIA.OL', True, 1, 'fetched'),
+                    TickerFetchStatus('BMA.OL', True, 1, 'fetched'),
+                ),
+            ),
+        )
+        result = build_market_data_write_test_result(
+            db_path=self.db_path,
+            tickers=['SNTIA.OL', 'BMA.OL'],
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 9),
+            source_name='synthetic',
+            allow_test_db_write=True,
+            allow_partial_invalid_skip=True,
+            source_override=source,
+        )
+        summary = result.to_summary_dict()
+        with sqlite3.connect(self.db_path) as connection:
+            written_tickers = tuple(
+                row[0]
+                for row in connection.execute(
+                    f'SELECT ticker FROM {V2_PRICE_TABLE_NAME} ORDER BY ticker'
+                ).fetchall()
+            )
+        self.assertEqual(result.write_result.inserted_count, 1)
+        self.assertEqual(result.write_result.invalid_row_count, 1)
+        self.assertEqual(result.write_result.tolerated_warnings, {'raw_low_higher_than_raw_close_tolerated': 1})
+        self.assertEqual(summary['tolerated_warning_count'], 1)
+        self.assertEqual(written_tickers, ('SNTIA.OL',))
+
+    def test_partial_mode_outputs_report_skipped_invalid_rows(self) -> None:
+        source = _SyntheticSource(
+            source_name='synthetic',
+            result=_result_with_rows(
+                rows=(
+                    _sample_source_row(ticker='CAMBI.OL'),
+                    _sample_source_row(ticker='BMA.OL', raw_high=98.0, raw_close=104.0),
+                ),
+                statuses=(
+                    TickerFetchStatus('CAMBI.OL', True, 1, 'fetched'),
+                    TickerFetchStatus('BMA.OL', True, 1, 'fetched'),
+                ),
+            ),
+        )
+        result = build_market_data_write_test_result(
+            db_path=self.db_path,
+            tickers=['CAMBI.OL', 'BMA.OL'],
+            start_date=date(2026, 6, 19),
+            end_date=date(2026, 8, 17),
+            source_name='synthetic',
+            allow_test_db_write=True,
+            allow_partial_invalid_skip=True,
+            source_override=source,
+        )
+        write_market_data_write_test_outputs(result=result, out_dir=self.out_dir)
+        summary = json.loads((self.out_dir / 'market_data_write_test_summary.json').read_text(encoding='utf-8'))
+        markdown = (self.out_dir / 'market_data_write_test_summary.md').read_text(encoding='utf-8')
+        with (self.out_dir / 'invalid_rows.csv').open('r', encoding='utf-8', newline='') as handle:
+            invalid_rows = list(csv.DictReader(handle))
+        self.assertTrue(summary['partial_invalid_skip_enabled'])
+        self.assertEqual(summary['skipped_invalid_row_count'], 1)
+        self.assertEqual(summary['skipped_invalid_tickers'], ['BMA.OL'])
+        self.assertEqual(summary['invalid_rows_skipped_partial_write'], 1)
+        self.assertEqual(invalid_rows[0]['ticker'], 'BMA.OL')
+        self.assertIn('- partial_invalid_skip_enabled: True', markdown)
+        self.assertIn('- skipped_invalid_tickers: BMA.OL', markdown)
+
     def test_adjusted_close_outside_raw_ohlc_range_is_allowed(self) -> None:
         source = _SyntheticSource(
             source_name='synthetic',

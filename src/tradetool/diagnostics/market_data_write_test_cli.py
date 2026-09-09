@@ -18,6 +18,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument('--end-date', help='Inclusive end date in YYYY-MM-DD format. Defaults to today.')
     parser.add_argument('--source', required=True, help='Market-data source name, for example yahoo.')
     parser.add_argument('--allow-test-db-write', action='store_true', help='Required acknowledgement for writing to a temporary test DB.')
+    parser.add_argument(
+        '--allow-partial-invalid-skip',
+        action='store_true',
+        help='Write valid rows to the temporary test DB while reporting and skipping invalid rows.',
+    )
     parser.add_argument('--out-dir', required=True, help='Output directory for the generated test-write report files.')
     return parser
 
@@ -36,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         end_date=end_date,
         source_name=args.source,
         allow_test_db_write=True,
+        allow_partial_invalid_skip=args.allow_partial_invalid_skip,
     )
     out_dir = Path(args.out_dir).expanduser().resolve()
     write_market_data_write_test_outputs(result=result, out_dir=out_dir)

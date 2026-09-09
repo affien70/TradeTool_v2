@@ -9,6 +9,7 @@ from pathlib import Path
 from tradetool.data.market_data_schema import (
     MarketDataDryRunValidationRow,
     MarketDataWriteResult,
+    dry_run_market_data_rows,
     initialize_market_data_schema,
     write_market_data_rows_for_test,
 )
@@ -70,8 +71,16 @@ class MarketDataWriteTestResult:
     written_rows: tuple[MarketDataWriteRowSample, ...]
     invalid_rows: tuple[MarketDataWriteRowSample, ...]
     generated_at_utc: str
+    partial_invalid_skip_enabled: bool = False
 
     def to_summary_dict(self) -> dict[str, object]:
+        skipped_invalid_tickers = (
+            tuple(sorted({row.ticker for row in self.invalid_rows})) if self.partial_invalid_skip_enabled else ()
+        )
+        skipped_invalid_row_count = self.write_result.invalid_row_count if self.partial_invalid_skip_enabled else 0
+        invalid_rows_blocked_default_write = (
+            self.write_result.invalid_row_count if not self.partial_invalid_skip_enabled and self.write_result.invalid_row_count else 0
+        )
         return {
             'db_path': str(self.db_path),
             'source_name': self.source_name,
@@ -89,6 +98,12 @@ class MarketDataWriteTestResult:
             'invalid_reasons': dict(self.write_result.invalid_reasons),
             'tolerated_warning_count': sum(self.write_result.tolerated_warnings.values()),
             'tolerated_warnings': dict(self.write_result.tolerated_warnings),
+            'partial_invalid_skip_enabled': self.partial_invalid_skip_enabled,
+            'skipped_invalid_row_count': skipped_invalid_row_count,
+            'skipped_invalid_tickers': list(skipped_invalid_tickers),
+            'written_valid_row_count': self.write_result.inserted_count + self.write_result.updated_count,
+            'invalid_rows_blocked_default_write': invalid_rows_blocked_default_write,
+            'invalid_rows_skipped_partial_write': skipped_invalid_row_count,
             'generated_at_utc': self.generated_at_utc,
         }
 
@@ -101,6 +116,7 @@ def build_market_data_write_test_result(
     end_date: date,
     source_name: str,
     allow_test_db_write: bool,
+    allow_partial_invalid_skip: bool = False,
     source_override: MarketDataSource | None = None,
 ) -> MarketDataWriteTestResult:
     if not allow_test_db_write:
@@ -142,11 +158,18 @@ def build_market_data_write_test_result(
         created_at_utc=generated_at_utc,
         updated_at_utc=generated_at_utc,
     )
-    write_result = write_market_data_rows_for_test(
-        db_path=schema.db_path,
-        rows=market_rows,
-        allow_test_db_write=allow_test_db_write,
-    )
+    if allow_partial_invalid_skip:
+        write_result = _write_market_data_rows_with_partial_invalid_skip(
+            db_path=schema.db_path,
+            rows=market_rows,
+            allow_test_db_write=allow_test_db_write,
+        )
+    else:
+        write_result = write_market_data_rows_for_test(
+            db_path=schema.db_path,
+            rows=market_rows,
+            allow_test_db_write=allow_test_db_write,
+        )
     action_rows = _build_action_rows(
         fetch_rows=fetch_result.rows,
         validation_rows=write_result.rows,
@@ -166,6 +189,33 @@ def build_market_data_write_test_result(
         written_rows=tuple(row for row in action_rows if row.action in {'inserted', 'updated'}),
         invalid_rows=tuple(row for row in action_rows if row.action == 'invalid'),
         generated_at_utc=generated_at_utc,
+        partial_invalid_skip_enabled=allow_partial_invalid_skip,
+    )
+
+
+def _write_market_data_rows_with_partial_invalid_skip(
+    *,
+    db_path: str | Path,
+    rows,
+    allow_test_db_write: bool,
+) -> MarketDataWriteResult:
+    preflight = dry_run_market_data_rows(db_path=db_path, rows=rows)
+    valid_rows = tuple(row for row, validation_row in zip(rows, preflight.rows) if validation_row.valid)
+    valid_write = write_market_data_rows_for_test(
+        db_path=db_path,
+        rows=valid_rows,
+        allow_test_db_write=allow_test_db_write,
+    )
+    return MarketDataWriteResult(
+        row_count_before=valid_write.row_count_before,
+        row_count_after=valid_write.row_count_after,
+        inserted_count=valid_write.inserted_count,
+        updated_count=valid_write.updated_count,
+        skipped_count=valid_write.skipped_count,
+        invalid_row_count=preflight.invalid_row_count,
+        invalid_reasons=dict(preflight.invalid_reasons),
+        tolerated_warnings=dict(preflight.tolerated_warnings),
+        rows=preflight.rows,
     )
 
 
@@ -218,6 +268,7 @@ def _normalize_action(action: str) -> str:
 
 
 def _render_summary_markdown(result: MarketDataWriteTestResult) -> str:
+    summary = result.to_summary_dict()
     lines = [
         '# Market Data Write Test Summary',
         '',
@@ -243,6 +294,12 @@ def _render_summary_markdown(result: MarketDataWriteTestResult) -> str:
         f'- skipped_count: {result.write_result.skipped_count}',
         f'- invalid_row_count: {result.write_result.invalid_row_count}',
         f'- tolerated_warning_count: {sum(result.write_result.tolerated_warnings.values())}',
+        f'- partial_invalid_skip_enabled: {result.partial_invalid_skip_enabled}',
+        f'- skipped_invalid_row_count: {summary["skipped_invalid_row_count"]}',
+        f'- skipped_invalid_tickers: {", ".join(summary["skipped_invalid_tickers"]) or "none"}',
+        f'- written_valid_row_count: {result.write_result.inserted_count + result.write_result.updated_count}',
+        f'- invalid_rows_blocked_default_write: {summary["invalid_rows_blocked_default_write"]}',
+        f'- invalid_rows_skipped_partial_write: {summary["invalid_rows_skipped_partial_write"]}',
         '- Writes are limited to an explicit temporary test DB.',
         '- No legacy database access or writes were performed.',
         '',
