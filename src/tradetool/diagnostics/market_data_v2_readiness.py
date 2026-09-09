@@ -125,6 +125,7 @@ def build_market_data_v2_readiness(
     benchmark_ticker: str | None = None,
     data_source: str = 'yahoo',
     min_history_rows: int = 252,
+    max_price_date: date | None = None,
 ) -> MarketDataV2ReadinessResult:
     requested_tickers = tuple(sorted({ticker.strip().upper() for ticker in tickers if ticker.strip()}))
     all_tickers = list(requested_tickers)
@@ -134,6 +135,7 @@ def build_market_data_v2_readiness(
         db_path=str(db_path),
         tickers=all_tickers,
         data_source=data_source,
+        max_price_date=max_price_date,
     )
 
     benchmark_key = None if benchmark_ticker is None else benchmark_ticker.strip().upper()

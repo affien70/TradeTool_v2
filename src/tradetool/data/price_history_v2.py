@@ -55,6 +55,7 @@ def load_price_history_v2_for_tickers(
     db_path: str,
     tickers: Sequence[str],
     data_source: str = 'yahoo',
+    max_price_date: date | None = None,
     database: ReadOnlySQLite | None = None,
     schema: SchemaInspection | None = None,
 ) -> PriceHistoryV2LoadResult:
@@ -91,9 +92,11 @@ def load_price_history_v2_for_tickers(
         WHERE UPPER(TRIM(ticker)) IN ({placeholders})
           AND data_source = ?
           AND date(price_date) IS NOT NULL
+          AND (? IS NULL OR date(price_date) <= date(?))
         ORDER BY UPPER(TRIM(ticker)), date(price_date)
     """
-    rows = readonly_db.fetch_all(query, (*normalized_tickers, normalized_source))
+    max_date_text = None if max_price_date is None else max_price_date.isoformat()
+    rows = readonly_db.fetch_all(query, (*normalized_tickers, normalized_source, max_date_text, max_date_text))
     rows_by_ticker: dict[str, list[PriceHistoryV2Record]] = defaultdict(list)
     for row in rows:
         adjusted_close = float(row['adjusted_close'])
