@@ -68,9 +68,9 @@ class IncumbentScreenerTests(unittest.TestCase):
 
     def test_pure_selector_uses_6m_relative_strength_then_ticker_and_marks_reasons(self) -> None:
         rows = (
-            {'ticker': 'CCC.OL', 'relative_strength_6m': 0.30},
-            {'ticker': 'BBB.OL', 'relative_strength_6m': 0.50},
-            {'ticker': 'AAA.OL', 'relative_strength_6m': 0.50},
+            {'ticker': 'CCC.OL', 'relative_strength_6m': 0.30, 'average_traded_value_20': 2_000_000.0},
+            {'ticker': 'BBB.OL', 'relative_strength_6m': 0.50, 'average_traded_value_20': 100_000.0},
+            {'ticker': 'AAA.OL', 'relative_strength_6m': 0.50, 'average_traded_value_20': 2_000_000.0},
             {'ticker': 'DDD.OL', 'relative_strength_6m': None},
         )
         selected = select_incumbent_candidates(rows, top_n=2)
@@ -78,6 +78,8 @@ class IncumbentScreenerTests(unittest.TestCase):
         self.assertEqual([row['incumbent_rank'] for row in selected], [1, 2, 3])
         self.assertEqual([row['incumbent_selected'] for row in selected], [True, True, False])
         self.assertEqual(selected[-1]['incumbent_selection_reason'], 'outside_top_n_relative_strength_6m')
+        self.assertEqual(selected[1]['risk_level'], 'HIGH')
+        self.assertIn('very_low_liquidity', selected[1]['risk_tags'])
 
     def test_build_screener_uses_snapshot_rows_and_writes_expected_outputs(self) -> None:
         _seed_market_db(self.db_path)
@@ -107,6 +109,9 @@ class IncumbentScreenerTests(unittest.TestCase):
         candidates = (self.out_dir / 'incumbent_screener_top_candidates.csv').read_text(encoding='utf-8')
         self.assertIn('relative_strength_6m', candidates)
         self.assertIn('average_traded_value_20', candidates)
+        self.assertIn('risk_level', candidates)
+        self.assertIn('risk_tags', candidates)
+        self.assertIn('risk_explanation_no', candidates)
 
     def test_cli_requires_expected_arguments_and_writes_outputs(self) -> None:
         _seed_market_db(self.db_path)

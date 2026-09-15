@@ -12,6 +12,7 @@ from tradetool.diagnostics.candidate_quality_comparison import DEFAULT_REFERENCE
 from tradetool.diagnostics.market_data_v2_readiness import build_market_data_v2_readiness
 from tradetool.diagnostics.incumbent_baseline import BASELINE_ID
 from tradetool.diagnostics.holdout_snapshot import load_stock_tickers
+from tradetool.explanation.incumbent_risk_tags import build_incumbent_risk_tags
 
 EXPECTED_REPORT_FILES = (
     'incumbent_screener_eligible_universe.csv',
@@ -76,12 +77,16 @@ def select_incumbent_candidates(rows: tuple[dict[str, object], ...], *, top_n: i
     ranked = sorted(eligible, key=lambda row: (-_as_float(row['relative_strength_6m']), str(row['ticker'])))
     output: list[dict[str, object]] = []
     for index, row in enumerate(ranked, start=1):
+        risk = build_incumbent_risk_tags(row)
         output.append(
             {
                 **row,
                 'incumbent_rank': index,
                 'incumbent_selected': index <= top_n,
                 'incumbent_selection_reason': 'selected_top_n_relative_strength_6m' if index <= top_n else 'outside_top_n_relative_strength_6m',
+                'risk_level': risk.risk_level,
+                'risk_tags': '|'.join(risk.risk_tags),
+                'risk_explanation_no': risk.risk_explanation_no,
             }
         )
     return tuple(output)
@@ -166,6 +171,8 @@ def _candidate_row(row) -> dict[str, object]:
         'above_sma200': features.get('above_sma200'),
         'average_traded_value_20': features.get('average_traded_value_20'),
         'drawdown_252': features.get('drawdown_252'),
+        'volatility_63': features.get('volatility_63'),
+        'distance_to_sma200': features.get('distance_to_sma200'),
     }
 
 
@@ -222,7 +229,12 @@ def _render_markdown(result: IncumbentScreenerResult) -> str:
         '## Top Candidates',
     ]
     for row in result.top_candidates:
-        lines.append(f"- {row['incumbent_rank']}. {row['ticker']} rs6m={row.get('relative_strength_6m')} rs3m={row.get('relative_strength_3m')}")
+        lines.append(
+            f"- {row['incumbent_rank']}. {row['ticker']} "
+            f"rs6m={row.get('relative_strength_6m')} "
+            f"rs3m={row.get('relative_strength_3m')} "
+            f"risk={row.get('risk_level')} tags={row.get('risk_tags')}"
+        )
     if not result.top_candidates:
         lines.append('- none')
     lines.extend(['', '## Guardrails', '- Reusable screener core only; no UI, ML, Holdings, or production DB write change.'])
