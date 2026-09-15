@@ -24,6 +24,8 @@ from tradetool.policy.trade_policy import (
     TRADE_POLICY_ENGINE_ID,
 )
 from tradetool.ui.screener import (
+    CHART_PERIOD_ROW_COUNTS,
+    DEFAULT_CHART_PERIOD_LABEL,
     PRICE_TABLE_LEGACY,
     PRICE_TABLE_V2,
     build_incumbent_screener_ui_result,
@@ -309,6 +311,142 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         self.assertEqual({row['ticker'] for row in price_spec['data']['values']}, {'CAMBI.OL'})
         self.assertEqual(price_spec['transform'][0]['fold'], ['close', 'sma50', 'sma200'])
         self.assertEqual(benchmark_spec['vconcat'][0]['transform'][0]['fold'], ['indexed_close', 'indexed_benchmark'])
+        db_path.unlink()
+
+    def test_v2_chart_period_changes_visible_range_only(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_period.sqlite')
+        universe_path = Path('/tmp/tradetool_v2_screener_ui_chart_period_universe.sqlite')
+        for path in (db_path, universe_path):
+            if path.exists():
+                path.unlink()
+        _build_fixture_v2_db(db_path)
+        _build_incumbent_universe_db(universe_path)
+        one_year_chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            chart_period_label=DEFAULT_CHART_PERIOD_LABEL,
+        )
+        three_month_chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            chart_period_label='3 mnd',
+        )
+        self.assertEqual(len(three_month_chart.price_points), CHART_PERIOD_ROW_COUNTS['3 mnd'])
+        self.assertGreater(len(one_year_chart.price_points), len(three_month_chart.price_points))
+        self.assertNotEqual(one_year_chart.requested_start_date, three_month_chart.requested_start_date)
+
+        before_rows = incumbent_screener_table_rows(
+            build_incumbent_screener_ui_result(
+                db_path=db_path,
+                universe_id='NORWAY_V2',
+                benchmark_ticker='OSEBX.OL',
+                as_of_date=date(2025, 9, 17),
+                data_source='yahoo',
+                top_n=3,
+                universe_db_path=universe_path,
+            )
+        )
+        build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            chart_period_label='2 år',
+        )
+        after_rows = incumbent_screener_table_rows(
+            build_incumbent_screener_ui_result(
+                db_path=db_path,
+                universe_id='NORWAY_V2',
+                benchmark_ticker='OSEBX.OL',
+                as_of_date=date(2025, 9, 17),
+                data_source='yahoo',
+                top_n=3,
+                universe_db_path=universe_path,
+            )
+        )
+        self.assertEqual([row['Ticker'] for row in before_rows], [row['Ticker'] for row in after_rows])
+        db_path.unlink()
+        universe_path.unlink()
+
+    def test_v2_chart_calculates_sma_before_visible_trim(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_sma.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        initialize_market_data_schema(db_path)
+        rows: list[MarketDataRow] = []
+        start = date(2025, 1, 1)
+        for index in range(320):
+            day = (start + timedelta(days=index)).isoformat()
+            rows.append(_sample_v2_row(ticker='CAMBI.OL', price_date=day, raw_close=100.0 + index, adjusted_close=100.0 + index))
+            rows.append(_sample_v2_row(ticker='OSEBX.OL', price_date=day, raw_close=300.0 + index, adjusted_close=300.0 + index))
+        write_market_data_rows_for_test(db_path=db_path, rows=rows, allow_test_db_write=True)
+
+        chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            chart_period_label='3 mnd',
+        )
+        self.assertEqual(len(chart.price_points), CHART_PERIOD_ROW_COUNTS['3 mnd'])
+        self.assertEqual(chart.sma200_non_null_count, len(chart.price_points))
+        self.assertIsNotNone(chart.price_points[0].sma200)
+        db_path.unlink()
+
+    def test_v2_chart_normalization_and_rs_math_start_at_100(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_math.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            chart_period_label='6 mnd',
+        )
+        first = chart.price_points[0]
+        last = chart.price_points[-1]
+        self.assertEqual(chart.first_normalized_date, first.price_date)
+        self.assertAlmostEqual(chart.first_indexed_ticker_value or 0.0, 100.0, places=6)
+        self.assertAlmostEqual(chart.first_indexed_benchmark_value or 0.0, 100.0, places=6)
+        self.assertAlmostEqual(chart.first_rs_index_value or 0.0, 100.0, places=6)
+        self.assertAlmostEqual(first.relative_strength_line or 0.0, 100.0, places=6)
+        expected_rs = ((last.indexed_close or 0.0) / (last.indexed_benchmark or 1.0)) * 100.0
+        self.assertAlmostEqual(last.relative_strength_line or 0.0, expected_rs, places=6)
+        db_path.unlink()
+
+    def test_v2_chart_specs_use_user_friendly_series_labels(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_labels.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        price_spec = build_price_chart_spec(chart)
+        benchmark_spec = build_relative_strength_chart_spec(chart)
+        assert price_spec is not None and benchmark_spec is not None
+        self.assertEqual(price_spec['encoding']['color']['field'], 'Serie')
+        self.assertIn("'Kurs'", price_spec['transform'][1]['calculate'])
+        self.assertIn("'SMA50'", price_spec['transform'][1]['calculate'])
+        self.assertIn("'SMA200'", price_spec['transform'][1]['calculate'])
+        self.assertIn("'CAMBI.OL'", benchmark_spec['vconcat'][0]['transform'][1]['calculate'])
+        self.assertIn("'OSEBX.OL'", benchmark_spec['vconcat'][0]['transform'][1]['calculate'])
+        self.assertEqual(benchmark_spec['vconcat'][1]['encoding']['y']['title'], 'Relativ styrke-indeks mot benchmark')
         db_path.unlink()
 
     def test_v2_chart_data_changes_with_selected_ticker(self) -> None:

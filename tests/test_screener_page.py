@@ -97,6 +97,8 @@ class ScreenerPageTests(unittest.TestCase):
                 setattr(streamlit_module, name, getattr(streamlit_stub, name))
 
         ui_module = types.ModuleType('tradetool.ui.screener')
+        ui_module.CHART_PERIOD_ROW_COUNTS = {'1 år': 252}
+        ui_module.DEFAULT_CHART_PERIOD_LABEL = '1 år'
 
         def _fail(*args, **kwargs):
             raise AssertionError('database access helper should not run during import')
@@ -195,8 +197,8 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("'selected_ticker_detail'", source)
         self.assertIn("'selected_ticker_price_chart'", source)
         self.assertIn("'selected_ticker_benchmark_chart'", source)
-        self.assertIn("key=f'price_chart_{chart_detail.ticker}_{chart_detail.requested_end_date}'", source)
-        self.assertIn("key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.requested_end_date}'", source)
+        self.assertIn("key=f'price_chart_{chart_detail.ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}'", source)
+        self.assertIn("key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}'", source)
 
     def test_chart_cache_inputs_include_ticker_and_as_of_date(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
@@ -205,3 +207,26 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn('benchmark_ticker: str', source)
         self.assertIn('data_source: str', source)
         self.assertIn('as_of_date_text: str', source)
+        self.assertIn('chart_period_label: str', source)
+
+    def test_screener_page_restores_chart_period_dropdown_without_changing_ranking_inputs(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertIn("st.selectbox(\n        'Grafperiode'", source)
+        self.assertIn('CHART_PERIOD_ROW_COUNTS', source)
+        self.assertIn('DEFAULT_CHART_PERIOD_LABEL', source)
+        self.assertIn('chart_period_label=chart_period_label', source)
+        ranking_call = source.split('build_incumbent_screener_ui_result(', 1)[1].split(')', 1)[0]
+        self.assertNotIn('chart_period_label', ranking_call)
+
+    def test_screener_page_exposes_chart_math_diagnostics_only_in_technical_expander(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        expander_body = source.split("with st.expander('Tekniske detaljer'", 1)[1]
+        self.assertIn("'chart_period'", expander_body)
+        self.assertIn("'chart_raw_rows_loaded'", expander_body)
+        self.assertIn("'chart_visible_rows'", expander_body)
+        self.assertIn("'chart_first_normalized_date'", expander_body)
+        self.assertIn("'chart_first_indexed_ticker_value'", expander_body)
+        self.assertIn("'chart_first_indexed_benchmark_value'", expander_body)
+        self.assertIn("'chart_first_rs_index_value'", expander_body)
+        self.assertIn("'chart_sma50_non_null_count'", expander_body)
+        self.assertIn("'chart_sma200_non_null_count'", expander_body)

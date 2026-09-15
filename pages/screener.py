@@ -7,6 +7,8 @@ import streamlit as st
 
 from tradetool.config.runtime_settings import inspect_app_database
 from tradetool.ui.screener import (
+    CHART_PERIOD_ROW_COUNTS,
+    DEFAULT_CHART_PERIOD_LABEL,
     build_incumbent_screener_ui_result,
     build_price_chart_spec,
     build_relative_strength_chart_spec,
@@ -67,7 +69,11 @@ def _render_price_chart(chart_detail) -> None:
     if spec is None:
         st.warning(_chart_empty_warning(chart_detail))
         return
-    st.vega_lite_chart(spec, use_container_width=True, key=f'price_chart_{chart_detail.ticker}_{chart_detail.requested_end_date}')
+    st.vega_lite_chart(
+        spec,
+        use_container_width=True,
+        key=f'price_chart_{chart_detail.ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}',
+    )
 
 
 def _render_relative_strength_chart(chart_detail) -> None:
@@ -77,7 +83,11 @@ def _render_relative_strength_chart(chart_detail) -> None:
     if spec is None:
         st.warning(_chart_empty_warning(chart_detail))
         return
-    st.vega_lite_chart(spec, use_container_width=True, key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.requested_end_date}')
+    st.vega_lite_chart(
+        spec,
+        use_container_width=True,
+        key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}',
+    )
 
 
 def _chart_empty_warning(chart_detail) -> str:
@@ -99,6 +109,7 @@ def _cached_selected_ticker_chart_detail(
     benchmark_ticker: str,
     data_source: str,
     as_of_date_text: str,
+    chart_period_label: str,
 ):
     return build_selected_ticker_chart_detail(
         db_path=Path(db_path_text),
@@ -107,6 +118,7 @@ def _cached_selected_ticker_chart_detail(
         price_table='price_history_v2',
         data_source=data_source,
         max_price_date=date.fromisoformat(as_of_date_text),
+        chart_period_label=chart_period_label,
     )
 
 
@@ -211,6 +223,13 @@ def render() -> None:
     detail_columns[3].metric('Pris', f"{float(selected_row.get('close')):.2f}" if selected_row.get('close') is not None else '')
     st.markdown(incumbent_candidate_explanation(selected_row))
     st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
+    chart_period_options = list(CHART_PERIOD_ROW_COUNTS)
+    chart_period_label = st.selectbox(
+        'Grafperiode',
+        options=chart_period_options,
+        index=chart_period_options.index(DEFAULT_CHART_PERIOD_LABEL),
+        key='screener_chart_period',
+    )
 
     chart_detail = _cached_selected_ticker_chart_detail(
         db_path_text=str(db_status.configured_path),
@@ -218,6 +237,7 @@ def render() -> None:
         benchmark_ticker=str(incumbent_result.benchmark_ticker),
         data_source=str(incumbent_result.data_source),
         as_of_date_text=str(incumbent_result.as_of_date),
+        chart_period_label=str(chart_period_label),
     )
     st.subheader('Prischart')
     _render_price_chart(chart_detail)
@@ -230,9 +250,18 @@ def render() -> None:
                 {'felt': 'selected_ticker_detail', 'verdi': detail_ticker},
                 {'felt': 'selected_ticker_price_chart', 'verdi': chart_detail.ticker},
                 {'felt': 'selected_ticker_benchmark_chart', 'verdi': chart_detail.ticker},
+                {'felt': 'chart_period', 'verdi': chart_detail.chart_period_label},
+                {'felt': 'chart_raw_rows_loaded', 'verdi': chart_detail.ticker_rows_found},
+                {'felt': 'chart_visible_rows', 'verdi': chart_detail.visible_rows},
                 {'felt': 'chart_row_count', 'verdi': len(chart_detail.price_points)},
                 {'felt': 'chart_first_date', 'verdi': chart_detail.requested_start_date},
                 {'felt': 'chart_last_date', 'verdi': chart_detail.requested_end_date},
+                {'felt': 'chart_first_normalized_date', 'verdi': chart_detail.first_normalized_date},
+                {'felt': 'chart_first_indexed_ticker_value', 'verdi': chart_detail.first_indexed_ticker_value},
+                {'felt': 'chart_first_indexed_benchmark_value', 'verdi': chart_detail.first_indexed_benchmark_value},
+                {'felt': 'chart_first_rs_index_value', 'verdi': chart_detail.first_rs_index_value},
+                {'felt': 'chart_sma50_non_null_count', 'verdi': chart_detail.sma50_non_null_count},
+                {'felt': 'chart_sma200_non_null_count', 'verdi': chart_detail.sma200_non_null_count},
             ],
             use_container_width=True,
             hide_index=True,
