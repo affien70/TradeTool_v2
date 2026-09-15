@@ -5,3 +5,11 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 reports/validation/
+
+# Local runtime state and generated artifacts
+.local/
+reports/
+.cache/
+*.sqlite
+*.sqlite3
+*.db

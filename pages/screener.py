@@ -5,6 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from tradetool.config.runtime_settings import inspect_app_database
 from tradetool.ui.screener import (
     build_incumbent_screener_ui_result,
     build_minimal_screener_result,
@@ -13,37 +14,67 @@ from tradetool.ui.screener import (
     incumbent_screener_table_rows,
 )
 
+UNIVERSE_BENCHMARKS = {
+    'NORWAY_V2': 'OSEBX.OL',
+    'SP500': '^GSPC',
+}
+DATA_SOURCE_OPTIONS = ('yahoo',)
+MISSING_DB_MESSAGE = 'Ingen lokal app-database funnet. Gå til Innstillinger eller bygg lokal database før screening.'
+
 
 def _parse_ticker_text(value: str) -> list[str]:
     return [token.strip().upper() for token in value.replace(',', ' ').split() if token.strip()]
+
+
+def _show_database_status() -> object:
+    status = inspect_app_database()
+    status_columns = st.columns(4)
+    status_columns[0].metric('Database', status.configured_path_text)
+    status_columns[1].metric('Finnes', 'ja' if status.exists else 'nei')
+    status_columns[2].metric('Lesbar', 'ja' if status.readable else 'nei')
+    status_columns[3].metric('price_history_v2', 'ja' if status.price_history_v2_table_exists else 'nei')
+    if not status.exists:
+        st.warning(MISSING_DB_MESSAGE)
+    elif not status.readable:
+        st.warning(f'Lokal app-database kan ikke leses: {status.error or status.configured_path_text}')
+    elif not status.price_history_v2_table_exists:
+        st.warning('Lokal app-database mangler tabellen price_history_v2.')
+    else:
+        st.caption(f'price_history_v2-rader: {status.row_count}. Siste prisdato: {status.latest_price_date}.')
+    return status
+
+
+def _database_ready(status: object) -> bool:
+    return bool(status.exists and status.readable and status.price_history_v2_table_exists)
 
 
 def render() -> None:
     st.title('Screener')
     st.write('Kjør den nåværende diagnostiske v2-screenerkjeden manuelt for å inspisere rangerte kandidater, trade signal og candidate type.')
     st.info('Dette er kun diagnostisk beslutningsstøtte. Resultatet er ikke produksjonsråd eller automatisk handelslogikk.')
+    db_status = _show_database_status()
 
     st.header('Incumbent screener')
     st.caption('Baseline `incumbent_naive_rs_6m_top_10_v0`. Risikotagger er informasjon, ikke filtre eller rangering.')
-    incumbent_db_path = st.text_input('DB path', value='', placeholder='/tmp/tradetool_v2_visual_screener_test.sqlite', key='incumbent_db_path')
     incumbent_columns = st.columns(5)
-    incumbent_universe_id = incumbent_columns[0].text_input('Universe ID', value='NORWAY_V2', key='incumbent_universe_id')
-    incumbent_benchmark = incumbent_columns[1].text_input('Benchmark ticker', value='OSEBX.OL', key='incumbent_benchmark_ticker')
-    incumbent_data_source = incumbent_columns[2].text_input('Data source', value='yahoo', key='incumbent_data_source')
+    incumbent_universe_id = incumbent_columns[0].selectbox('Universe', options=list(UNIVERSE_BENCHMARKS), index=0, key='incumbent_universe_id')
+    incumbent_benchmark = UNIVERSE_BENCHMARKS[incumbent_universe_id]
+    incumbent_columns[1].metric('Benchmark', incumbent_benchmark)
+    incumbent_data_source = incumbent_columns[2].selectbox('Data source', options=list(DATA_SOURCE_OPTIONS), index=0, key='incumbent_data_source')
     incumbent_as_of_date = incumbent_columns[3].date_input('As-of date', value=date.today(), key='incumbent_as_of_date')
     incumbent_top_n = int(incumbent_columns[4].number_input('Top N', min_value=1, max_value=100, value=10, step=1, key='incumbent_top_n'))
 
     if st.button('Kjør incumbent screener'):
-        if not incumbent_db_path.strip():
-            st.warning('Oppgi en lokal databasebane før du kjører incumbent screener.')
+        if not _database_ready(db_status):
+            st.warning(MISSING_DB_MESSAGE)
             return
         try:
             incumbent_result = build_incumbent_screener_ui_result(
-                db_path=Path(incumbent_db_path.strip()),
-                universe_id=incumbent_universe_id.strip() or 'NORWAY_V2',
-                benchmark_ticker=incumbent_benchmark.strip() or 'OSEBX.OL',
+                db_path=Path(db_status.configured_path),
+                universe_id=incumbent_universe_id,
+                benchmark_ticker=incumbent_benchmark,
                 as_of_date=incumbent_as_of_date,
-                data_source=incumbent_data_source.strip() or 'yahoo',
+                data_source=incumbent_data_source,
                 top_n=incumbent_top_n,
             )
             st.session_state['incumbent_screener_result'] = incumbent_result
@@ -74,31 +105,34 @@ def render() -> None:
         with st.expander('Avvisninger og datagap'):
             st.dataframe(list(incumbent_result.rejections), use_container_width=True)
 
+    st.header('Diagnostisk screener')
     price_source_label = st.radio(
         'Prisdatasource',
         options=['Legacy price_history', 'V2 price_history_v2'],
         index=0,
         horizontal=True,
     )
-    database_path = st.text_input('Lokal kopi av SQLite-database', value='', placeholder='/tmp/portfolio_copy.sqlite')
+    database_path = db_status.configured_path_text
     if price_source_label == 'V2 price_history_v2':
         st.warning('V2 price_history_v2 er kun test/diagnostisk markedsdata. UI-en kan ikke oppdatere eller skrive data.')
-        universe_id = st.text_input('Universe ID', value='EXPLICIT_V2_TEST')
+        universe_id = st.selectbox('Universe', options=list(UNIVERSE_BENCHMARKS), index=0, key='diagnostic_v2_universe_id')
         explicit_ticker_text = st.text_area('Tickere for v2-test', value='CAMBI.OL SNTIA.OL GOD.OL')
-        benchmark_ticker = st.text_input('Benchmark ticker', value='OSEBX.OL')
-        data_source = st.text_input('V2 data_source', value='yahoo')
+        benchmark_ticker = UNIVERSE_BENCHMARKS[universe_id]
+        st.metric('Benchmark', benchmark_ticker)
+        data_source = st.selectbox('Data source', options=list(DATA_SOURCE_OPTIONS), index=0, key='diagnostic_v2_data_source')
         price_table = 'price_history_v2'
     else:
-        universe_id = st.text_input('Universe ID', value='NORWAY_V2')
+        universe_id = st.selectbox('Universe', options=list(UNIVERSE_BENCHMARKS), index=0, key='diagnostic_universe_id')
         explicit_ticker_text = ''
-        benchmark_ticker = st.text_input('Benchmark ticker', value='^OSEAX')
-        data_source = 'yahoo'
+        benchmark_ticker = UNIVERSE_BENCHMARKS[universe_id]
+        st.metric('Benchmark', benchmark_ticker)
+        data_source = st.selectbox('Data source', options=list(DATA_SOURCE_OPTIONS), index=0, key='diagnostic_data_source')
         price_table = 'price_history'
     show_avoid = st.checkbox('Vis AVOID-rader', value=False)
 
     if st.button('Kjør diagnostisk screener'):
-        if not database_path.strip():
-            st.warning('Oppgi en lokal databasebane før du kjører screeneren.')
+        if not _database_ready(db_status):
+            st.warning(MISSING_DB_MESSAGE)
             return
         explicit_tickers = _parse_ticker_text(explicit_ticker_text) if price_table == 'price_history_v2' else None
         if price_table == 'price_history_v2' and not explicit_tickers:
@@ -112,14 +146,14 @@ def render() -> None:
                 benchmark_ticker=benchmark_ticker.strip() or None,
                 explicit_tickers=explicit_tickers,
                 price_table=price_table,
-                data_source=data_source.strip() or 'yahoo',
+                data_source=data_source,
             )
             st.session_state['screener_result'] = result
-            st.session_state['screener_db_path'] = database_path.strip()
-            st.session_state['screener_universe_id'] = universe_id.strip() or 'NORWAY_V2'
-            st.session_state['screener_benchmark_ticker'] = benchmark_ticker.strip() or None
+            st.session_state['screener_db_path'] = database_path
+            st.session_state['screener_universe_id'] = universe_id
+            st.session_state['screener_benchmark_ticker'] = benchmark_ticker
             st.session_state['screener_price_table'] = price_table
-            st.session_state['screener_data_source'] = data_source.strip() or 'yahoo'
+            st.session_state['screener_data_source'] = data_source
         except Exception as exc:  # pragma: no cover
             st.error(str(exc))
             return

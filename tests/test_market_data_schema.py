@@ -199,6 +199,10 @@ class MarketDataSchemaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_market_data_db_path(LEGACY_PRODUCTION_DB_PATH)
 
+    def test_repo_local_app_database_path_is_allowed(self) -> None:
+        resolved = validate_market_data_db_path(Path('.local') / 'tradetool_v2.sqlite')
+        self.assertEqual(resolved, (Path.cwd() / '.local' / 'tradetool_v2.sqlite').resolve())
+
     def test_cli_writes_only_expected_report_files(self) -> None:
         db_path = Path('/tmp/tradetool_v2_schema_cli.sqlite')
         out_dir = Path('/tmp/tradetool_v2_schema_cli_output')

@@ -10,6 +10,7 @@ RAW_CLOSE_BOUNDARY_ABSOLUTE_TOLERANCE = 0.10
 RAW_CLOSE_BOUNDARY_RELATIVE_TOLERANCE = 0.0025
 LEGACY_PRODUCTION_DB_PATH = Path('/Users/affien/DEV/TradeTool/portfolio.sqlite').resolve()
 REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_LOCAL_DIR = REPO_ROOT / '.local'
 REPO_TMP_DIR = REPO_ROOT / 'tmp'
 SYSTEM_TMP_DIR = Path('/tmp').resolve()
 V2_PRICE_TABLE_NAME = 'price_history_v2'
@@ -162,8 +163,9 @@ def validate_market_data_db_path(db_path: str | Path) -> Path:
         raise ValueError(f'Market-data schema path must be a SQLite file path, not a directory: {resolved}')
     allowed_tmp = resolved.is_relative_to(SYSTEM_TMP_DIR)
     allowed_repo_tmp = resolved.is_relative_to(REPO_TMP_DIR)
-    if not (allowed_tmp or allowed_repo_tmp):
-        raise ValueError(f'Market-data schema path must be under /tmp or repo-local tmp/: {resolved}')
+    allowed_repo_local = resolved.is_relative_to(REPO_LOCAL_DIR)
+    if not (allowed_tmp or allowed_repo_tmp or allowed_repo_local):
+        raise ValueError(f'Market-data schema path must be under /tmp, repo-local tmp/, or repo-local .local/: {resolved}')
     return resolved
 
 

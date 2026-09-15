@@ -105,11 +105,24 @@ class ScreenerPageTests(unittest.TestCase):
         ui_module.build_selected_ticker_chart_detail = _fail
         ui_module.build_selected_ticker_detail = _fail
         ui_module.incumbent_screener_table_rows = _fail
+        runtime_module = types.ModuleType('tradetool.config.runtime_settings')
+        runtime_module.inspect_app_database = lambda: types.SimpleNamespace(
+            configured_path=Path('/tmp/missing.sqlite'),
+            configured_path_text='/tmp/missing.sqlite',
+            exists=False,
+            readable=False,
+            price_history_v2_table_exists=False,
+            row_count=None,
+            latest_price_date=None,
+            error=None,
+        )
         previous_streamlit = sys.modules.get('streamlit')
         previous_ui = sys.modules.get('tradetool.ui.screener')
+        previous_runtime = sys.modules.get('tradetool.config.runtime_settings')
         streamlit_module.session_state = {}
         sys.modules['streamlit'] = streamlit_module
         sys.modules['tradetool.ui.screener'] = ui_module
+        sys.modules['tradetool.config.runtime_settings'] = runtime_module
         try:
             spec = importlib.util.spec_from_file_location('pages.screener_test_import', path)
             module = importlib.util.module_from_spec(spec)
@@ -124,6 +137,10 @@ class ScreenerPageTests(unittest.TestCase):
                 sys.modules.pop('tradetool.ui.screener', None)
             else:
                 sys.modules['tradetool.ui.screener'] = previous_ui
+            if previous_runtime is None:
+                sys.modules.pop('tradetool.config.runtime_settings', None)
+            else:
+                sys.modules['tradetool.config.runtime_settings'] = previous_runtime
 
     def test_screener_page_has_no_automatic_db_access_on_page_load(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
@@ -131,3 +148,15 @@ class ScreenerPageTests(unittest.TestCase):
         prefix = source.split("if st.button('Kjør diagnostisk screener')", 1)[0]
         self.assertNotIn('build_minimal_screener_result(', prefix)
         self.assertIn("st.session_state.get('screener_result')", source)
+
+    def test_screener_page_uses_configured_database_and_dropdown_inputs(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertIn('inspect_app_database()', source)
+        self.assertNotIn("st.text_input('DB path'", source)
+        self.assertNotIn("st.text_input('Lokal kopi av SQLite-database'", source)
+        self.assertNotIn("st.text_input('Universe ID'", source)
+        self.assertNotIn("st.text_input('Benchmark ticker'", source)
+        self.assertIn("selectbox('Universe'", source)
+        self.assertIn("selectbox('Data source'", source)
+        self.assertIn('UNIVERSE_BENCHMARKS', source)
+        self.assertIn('Ingen lokal app-database funnet. Gå til Innstillinger eller bygg lokal database før screening.', source)
