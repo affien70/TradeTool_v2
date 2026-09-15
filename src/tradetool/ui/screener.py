@@ -184,6 +184,47 @@ class SelectedTickerChartDetail:
     warning: str | None = None
 
 
+def build_incumbent_screener_ui_result(
+    *,
+    db_path: str | Path,
+    universe_id: str,
+    benchmark_ticker: str,
+    as_of_date,
+    data_source: str,
+    top_n: int = 10,
+    universe_db_path: str | Path | None = None,
+):
+    from tradetool.ranking.incumbent_screener import build_incumbent_screener
+
+    kwargs = {
+        'db_path': db_path,
+        'universe_id': universe_id,
+        'benchmark_ticker': benchmark_ticker,
+        'as_of_date': as_of_date,
+        'data_source': data_source,
+        'top_n': top_n,
+    }
+    if universe_db_path is not None:
+        kwargs['universe_db_path'] = universe_db_path
+    return build_incumbent_screener(**kwargs)
+
+
+def incumbent_screener_table_rows(result) -> list[dict[str, object]]:
+    fields = (
+        'incumbent_rank',
+        'ticker',
+        'relative_strength_6m',
+        'relative_strength_3m',
+        'return_6m',
+        'return_3m',
+        'close',
+        'risk_level',
+        'risk_tags',
+        'risk_explanation_no',
+    )
+    return [{field: row.get(field) for field in fields} for row in result.top_candidates]
+
+
 def build_minimal_screener_result(
     *,
     db_path: str | Path,

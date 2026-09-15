@@ -26,6 +26,9 @@ class _StreamlitStub:
     def subheader(self, *args, **kwargs) -> None:
         return None
 
+    def header(self, *args, **kwargs) -> None:
+        return None
+
     def caption(self, *args, **kwargs) -> None:
         return None
 
@@ -58,8 +61,17 @@ class _StreamlitStub:
     def text_area(self, label: str, value: str = '', **kwargs) -> str:
         return value
 
+    def date_input(self, label: str, value=None, **kwargs):
+        return value
+
+    def number_input(self, label: str, value=0, **kwargs):
+        return value
+
     def button(self, *args, **kwargs) -> bool:
         return False
+
+    def expander(self, *args, **kwargs):
+        return self
 
     def selectbox(self, label: str, options, index: int = 0, **kwargs):
         return options[index] if options else None
@@ -89,8 +101,10 @@ class ScreenerPageTests(unittest.TestCase):
             raise AssertionError('database access helper should not run during import')
 
         ui_module.build_minimal_screener_result = _fail
+        ui_module.build_incumbent_screener_ui_result = _fail
         ui_module.build_selected_ticker_chart_detail = _fail
         ui_module.build_selected_ticker_detail = _fail
+        ui_module.incumbent_screener_table_rows = _fail
         previous_streamlit = sys.modules.get('streamlit')
         previous_ui = sys.modules.get('tradetool.ui.screener')
         streamlit_module.session_state = {}

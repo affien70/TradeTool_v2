@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -25,9 +26,11 @@ from tradetool.policy.trade_policy import (
 from tradetool.ui.screener import (
     PRICE_TABLE_LEGACY,
     PRICE_TABLE_V2,
+    build_incumbent_screener_ui_result,
     build_minimal_screener_result,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
+    incumbent_screener_table_rows,
 )
 
 
@@ -97,6 +100,15 @@ def _build_fixture_v2_db(path: Path) -> None:
         rows.append(_sample_v2_row(ticker='GOD.OL', price_date=day, raw_close=140.0 + index, adjusted_close=100.0 + index, volume=2400.0 + index))
         rows.append(_sample_v2_row(ticker='OSEBX.OL', price_date=day, raw_close=300.0 + index, adjusted_close=260.0 + index, volume=4000.0 + index))
     write_market_data_rows_for_test(db_path=path, rows=rows, allow_test_db_write=True)
+
+
+def _build_incumbent_universe_db(path: Path) -> None:
+    with sqlite3.connect(path) as connection:
+        connection.execute('CREATE TABLE universe_cache (universe_key TEXT PRIMARY KEY, tickers_json TEXT, source_label TEXT, updated_at TEXT)')
+        connection.execute(
+            'INSERT INTO universe_cache VALUES (?, ?, ?, ?)',
+            ('NORWAY_V2', json.dumps(['CAMBI.OL', 'SNTIA.OL', 'GOD.OL', 'OSEBX.OL']), 'fixture', '2026-09-15T00:00:00Z'),
+        )
 
 
 class ScreenerUiOrchestrationTests(unittest.TestCase):
@@ -304,3 +316,42 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         after = initialize_market_data_schema(db_path).row_count
         self.assertEqual(before, after)
         db_path.unlink()
+
+    def test_incumbent_screener_ui_uses_core_and_outputs_risk_fields(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_incumbent_ui.sqlite')
+        universe_path = Path('/tmp/tradetool_v2_incumbent_ui_universe.sqlite')
+        for path in (db_path, universe_path):
+            if path.exists():
+                path.unlink()
+        _build_fixture_v2_db(db_path)
+        _build_incumbent_universe_db(universe_path)
+        result = build_incumbent_screener_ui_result(
+            db_path=db_path,
+            universe_id='NORWAY_V2',
+            benchmark_ticker='OSEBX.OL',
+            as_of_date=date(2025, 9, 17),
+            data_source='yahoo',
+            top_n=2,
+            universe_db_path=universe_path,
+        )
+        rows = incumbent_screener_table_rows(result)
+        self.assertEqual(result.baseline_id, 'incumbent_naive_rs_6m_top_10_v0')
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(list(rows[0]), [
+            'incumbent_rank',
+            'ticker',
+            'relative_strength_6m',
+            'relative_strength_3m',
+            'return_6m',
+            'return_3m',
+            'close',
+            'risk_level',
+            'risk_tags',
+            'risk_explanation_no',
+        ])
+        self.assertIn(rows[0]['risk_level'], {'LOW', 'MEDIUM', 'HIGH'})
+        self.assertIsInstance(rows[0]['risk_explanation_no'], str)
+        self.assertNotIn('ml_score', rows[0])
+        self.assertNotIn('holdings_signal', rows[0])
+        db_path.unlink()
+        universe_path.unlink()

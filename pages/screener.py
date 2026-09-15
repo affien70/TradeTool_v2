@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import streamlit as st
 
 from tradetool.ui.screener import (
+    build_incumbent_screener_ui_result,
     build_minimal_screener_result,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
+    incumbent_screener_table_rows,
 )
 
 
@@ -19,6 +22,57 @@ def render() -> None:
     st.title('Screener')
     st.write('Kjør den nåværende diagnostiske v2-screenerkjeden manuelt for å inspisere rangerte kandidater, trade signal og candidate type.')
     st.info('Dette er kun diagnostisk beslutningsstøtte. Resultatet er ikke produksjonsråd eller automatisk handelslogikk.')
+
+    st.header('Incumbent screener')
+    st.caption('Baseline `incumbent_naive_rs_6m_top_10_v0`. Risikotagger er informasjon, ikke filtre eller rangering.')
+    incumbent_db_path = st.text_input('DB path', value='', placeholder='/tmp/tradetool_v2_visual_screener_test.sqlite', key='incumbent_db_path')
+    incumbent_columns = st.columns(5)
+    incumbent_universe_id = incumbent_columns[0].text_input('Universe ID', value='NORWAY_V2', key='incumbent_universe_id')
+    incumbent_benchmark = incumbent_columns[1].text_input('Benchmark ticker', value='OSEBX.OL', key='incumbent_benchmark_ticker')
+    incumbent_data_source = incumbent_columns[2].text_input('Data source', value='yahoo', key='incumbent_data_source')
+    incumbent_as_of_date = incumbent_columns[3].date_input('As-of date', value=date.today(), key='incumbent_as_of_date')
+    incumbent_top_n = int(incumbent_columns[4].number_input('Top N', min_value=1, max_value=100, value=10, step=1, key='incumbent_top_n'))
+
+    if st.button('Kjør incumbent screener'):
+        if not incumbent_db_path.strip():
+            st.warning('Oppgi en lokal databasebane før du kjører incumbent screener.')
+            return
+        try:
+            incumbent_result = build_incumbent_screener_ui_result(
+                db_path=Path(incumbent_db_path.strip()),
+                universe_id=incumbent_universe_id.strip() or 'NORWAY_V2',
+                benchmark_ticker=incumbent_benchmark.strip() or 'OSEBX.OL',
+                as_of_date=incumbent_as_of_date,
+                data_source=incumbent_data_source.strip() or 'yahoo',
+                top_n=incumbent_top_n,
+            )
+            st.session_state['incumbent_screener_result'] = incumbent_result
+        except Exception as exc:  # pragma: no cover
+            st.error(str(exc))
+            return
+
+    incumbent_result = st.session_state.get('incumbent_screener_result')
+    if incumbent_result is not None:
+        st.subheader('Incumbent oppsummering')
+        incumbent_summary = st.columns(5)
+        incumbent_summary[0].metric('Univers', incumbent_result.universe_id)
+        incumbent_summary[1].metric('Benchmark', incumbent_result.benchmark_ticker)
+        incumbent_summary[2].metric('As-of', incumbent_result.as_of_date)
+        incumbent_summary[3].metric('Eligible/rangert', incumbent_result.eligible_count)
+        incumbent_summary[4].metric('Valgt', incumbent_result.selected_count)
+        st.json(
+            {
+                'baseline_id': incumbent_result.baseline_id,
+                'universe_source': incumbent_result.universe_source,
+                'requested_stock_ticker_count': incumbent_result.requested_stock_ticker_count,
+                'effective_feature_date': incumbent_result.effective_feature_date,
+                'close_input_source': incumbent_result.close_input_source,
+                'risk_tags_are_filters': False,
+            }
+        )
+        st.dataframe(incumbent_screener_table_rows(incumbent_result), use_container_width=True)
+        with st.expander('Avvisninger og datagap'):
+            st.dataframe(list(incumbent_result.rejections), use_container_width=True)
 
     price_source_label = st.radio(
         'Prisdatasource',
