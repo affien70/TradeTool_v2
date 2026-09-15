@@ -11,6 +11,7 @@ from tradetool.data.market_data_schema import MarketDataRow, initialize_market_d
 from tradetool.diagnostics.holdout_snapshot import (
     EXPECTED_REPORT_FILES,
     build_holdout_snapshot,
+    load_stock_tickers,
     write_holdout_snapshot_outputs,
 )
 from tradetool.diagnostics.holdout_snapshot_cli import build_argument_parser
@@ -59,12 +60,33 @@ def _seed_snapshot_db(path: Path, *, include_benchmark: bool = True) -> None:
     write_market_data_rows_for_test(db_path=path, rows=rows, allow_test_db_write=True)
 
 
+def _seed_sp500_snapshot_db(path: Path) -> None:
+    initialize_market_data_schema(path)
+    start = date(2025, 1, 1)
+    rows: list[MarketDataRow] = []
+    for index in range(270):
+        day = start + timedelta(days=index)
+        rows.append(_market_row(ticker='AAPL', price_date=day, close=150.0 + index * 0.6))
+        rows.append(_market_row(ticker='MSFT', price_date=day, close=250.0 + index * 0.5))
+        rows.append(_market_row(ticker='NVDA', price_date=day, close=120.0 + index * 0.8))
+        rows.append(_market_row(ticker='^GSPC', price_date=day, close=4000.0 + index * 1.5))
+    write_market_data_rows_for_test(db_path=path, rows=rows, allow_test_db_write=True)
+
+
 def _seed_universe_db(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         connection.execute('CREATE TABLE universe_cache (universe_key TEXT PRIMARY KEY, tickers_json TEXT, source_label TEXT, updated_at TEXT)')
         connection.execute(
             'INSERT INTO universe_cache VALUES (?, ?, ?, ?)',
             ('NORWAY_V2', json.dumps(['DNB.OL', 'NONG.OL', 'MISSING.OL']), 'unit', '2026-09-09T00:00:00Z'),
+        )
+        connection.execute(
+            'INSERT INTO universe_cache VALUES (?, ?, ?, ?)',
+            ('NORWAY_WITH_BENCHMARK', json.dumps(['DNB.OL', 'OSEBX.OL', 'NONG.OL', '']), 'unit', '2026-09-09T00:00:00Z'),
+        )
+        connection.execute(
+            'INSERT INTO universe_cache VALUES (?, ?, ?, ?)',
+            ('SP500', json.dumps(['AAPL', 'MSFT', '^GSPC', 'NVDA', '']), 'unit', '2026-09-09T00:00:00Z'),
         )
 
 
@@ -109,6 +131,43 @@ class HoldoutSnapshotTests(unittest.TestCase):
         self.assertEqual(result.ranked_count, 2)
         self.assertLessEqual(date.fromisoformat(result.effective_feature_date or '9999-01-01'), date(2025, 9, 27))
         self.assertTrue(all(date.fromisoformat(str(row['latest_price_date'])) <= date(2025, 9, 27) for row in result.ranked_rows))
+
+    def test_load_stock_tickers_keeps_ose_tickers_and_excludes_ose_benchmark(self) -> None:
+        _seed_universe_db(self.universe_path)
+        tickers, source = load_stock_tickers(
+            universe_id='NORWAY_WITH_BENCHMARK',
+            universe_db_path=self.universe_path,
+            benchmark_ticker='OSEBX.OL',
+        )
+        self.assertEqual(tickers, ('DNB.OL', 'NONG.OL'))
+        self.assertEqual(source, 'universe_cache:NORWAY_WITH_BENCHMARK')
+
+    def test_load_stock_tickers_supports_sp500_tickers_and_excludes_benchmark(self) -> None:
+        _seed_universe_db(self.universe_path)
+        tickers, source = load_stock_tickers(
+            universe_id='SP500',
+            universe_db_path=self.universe_path,
+            benchmark_ticker='^GSPC',
+        )
+        self.assertEqual(tickers, ('AAPL', 'MSFT', 'NVDA'))
+        self.assertEqual(source, 'universe_cache:SP500')
+
+    def test_snapshot_generates_ranked_candidates_for_non_ol_universe(self) -> None:
+        _seed_sp500_snapshot_db(self.db_path)
+        _seed_universe_db(self.universe_path)
+        result = build_holdout_snapshot(
+            db_path=self.db_path,
+            universe_id='SP500',
+            benchmark_ticker='^GSPC',
+            as_of_date=date(2025, 9, 27),
+            data_source='yahoo',
+            universe_db_path=self.universe_path,
+        )
+        self.assertTrue(result.snapshot_valid)
+        self.assertEqual(result.requested_stock_ticker_count, 3)
+        self.assertEqual(result.present_ticker_count, 3)
+        self.assertEqual(result.ranked_count, 3)
+        self.assertNotIn('^GSPC', {row['ticker'] for row in result.ranked_rows})
 
     def test_missing_benchmark_makes_snapshot_invalid(self) -> None:
         _seed_snapshot_db(self.db_path, include_benchmark=False)

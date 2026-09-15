@@ -152,9 +152,9 @@ def build_holdout_snapshot(
 def load_stock_tickers(*, universe_id: str, universe_db_path: str | Path, benchmark_ticker: str) -> tuple[tuple[str, ...], str]:
     selection = load_universe_tickers(universe_id=universe_id, database=ReadOnlySQLite(universe_db_path))
     benchmark = benchmark_ticker.strip().upper()
-    tickers = tuple(ticker for ticker in selection.tickers if ticker.endswith('.OL') and not ticker.startswith('^') and ticker != benchmark)
+    tickers = tuple(ticker for ticker in selection.tickers if ticker and ticker != benchmark)
     if not tickers:
-        raise ValueError(f'Universe "{universe_id}" did not produce any .OL stock tickers.')
+        raise ValueError(f'Universe "{universe_id}" did not produce any stock tickers after excluding benchmark "{benchmark}".')
     return tickers, selection.source
 
 
