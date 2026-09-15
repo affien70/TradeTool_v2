@@ -9,9 +9,13 @@ from tradetool.config.runtime_settings import inspect_app_database
 from tradetool.ui.screener import (
     build_incumbent_screener_ui_result,
     build_selected_ticker_chart_detail,
+    incumbent_candidate_explanation,
     incumbent_candidate_detail_rows,
     incumbent_screener_eligible_table_rows,
+    incumbent_screener_summary_rows,
     incumbent_screener_table_rows,
+    incumbent_screener_ticker_options,
+    resolve_incumbent_selected_ticker,
     selected_incumbent_candidate,
 )
 
@@ -101,18 +105,17 @@ def _render_relative_strength_chart(chart_detail) -> None:
 
 
 def render() -> None:
-    st.title('Screener')
-    st.caption('Beslutningsstøtte for aksjeutvalg. Kandidater velges av incumbent screener-kjernen; risikotagger er informasjon, ikke filtre.')
+    st.title('Aksje-screener')
+    st.caption('V1-lignende flyt med V2 incumbent screener-kjerne. Risikotagger er informasjon, ikke filtre.')
     db_status = _show_database_status()
 
-    st.subheader('Aksje-screener')
     control_left, control_right = st.columns([1.6, 1.0])
     with control_left:
         universe_id = st.selectbox('Univers', options=list(UNIVERSE_BENCHMARKS), index=0, key='incumbent_universe_id')
         benchmark_ticker = UNIVERSE_BENCHMARKS[universe_id]
         data_source = st.selectbox('Datakilde', options=list(DATA_SOURCE_OPTIONS), index=0, key='incumbent_data_source')
     with control_right:
-        as_of_date = st.date_input('As-of date', value=date.today(), key='incumbent_as_of_date')
+        as_of_date = st.date_input('Dato', value=date.today(), key='incumbent_as_of_date')
         top_n = int(st.number_input('Top N', min_value=1, max_value=100, value=10, step=1, key='incumbent_top_n'))
         run_clicked = st.button('Kjør screener', key='incumbent_run_button', type='primary')
     st.caption(f'Benchmark: {benchmark_ticker} | Motor: incumbent_naive_rs_6m_top_10_v0 | Close: adjusted_close')
@@ -143,13 +146,9 @@ def render() -> None:
         st.info('Velg univers og klikk Kjør screener for å vise kandidater.')
         return
 
-    st.subheader('Kjøreoppsummering')
     summary_columns = st.columns(5)
-    summary_columns[0].metric('Univers', incumbent_result.universe_id)
-    summary_columns[1].metric('Benchmark', incumbent_result.benchmark_ticker)
-    summary_columns[2].metric('Effektiv dato', incumbent_result.effective_feature_date or incumbent_result.as_of_date)
-    summary_columns[3].metric('Rangert', incumbent_result.eligible_count)
-    summary_columns[4].metric('Valgt', incumbent_result.selected_count)
+    for column, row in zip(summary_columns, incumbent_screener_summary_rows(incumbent_result), strict=True):
+        column.metric(str(row['felt']), row['verdi'])
 
     table_rows = incumbent_screener_table_rows(incumbent_result)
     st.subheader('Rangerte kandidater')
@@ -165,14 +164,24 @@ def render() -> None:
     selected_rows = []
     if hasattr(event, 'selection') and isinstance(event.selection, dict):
         selected_rows = event.selection.get('rows', []) or []
-    if selected_rows and 0 <= int(selected_rows[0]) < len(table_rows):
-        st.session_state['screener_chart_ticker'] = str(table_rows[int(selected_rows[0])].get('Ticker') or '')
-    elif not st.session_state.get('screener_chart_ticker') and table_rows:
-        st.session_state['screener_chart_ticker'] = str(table_rows[0].get('Ticker') or '')
 
-    selected_ticker = str(st.session_state.get('screener_chart_ticker') or '').strip()
-    if not selected_ticker and table_rows:
-        selected_ticker = str(table_rows[0].get('Ticker') or '').strip()
+    selected_ticker = resolve_incumbent_selected_ticker(
+        table_rows,
+        current_ticker=str(st.session_state.get('screener_chart_ticker') or ''),
+        selected_row_indexes=selected_rows,
+        selected_ticker=str(st.session_state.get('screener_selected_ticker_picker') or ''),
+    )
+    if selected_ticker:
+        st.session_state['screener_chart_ticker'] = selected_ticker
+        if selected_rows:
+            st.session_state['screener_selected_ticker_picker'] = selected_ticker
+
+    ticker_options = incumbent_screener_ticker_options(table_rows)
+    if ticker_options:
+        selected_index = ticker_options.index(selected_ticker) if selected_ticker in ticker_options else 0
+        selected_ticker = st.selectbox('Valgt kandidat', options=ticker_options, index=selected_index, key='screener_selected_ticker_picker')
+        st.session_state['screener_chart_ticker'] = selected_ticker
+
     st.subheader('Valgt kandidat')
     if not selected_ticker:
         st.warning('Ingen rader tilgjengelig med gjeldende filter.')
@@ -184,7 +193,7 @@ def render() -> None:
     detail_columns[1].metric('Incumbent-rang', selected_row.get('incumbent_rank'))
     detail_columns[2].metric('Risiko', selected_row.get('risk_level'))
     detail_columns[3].metric('Pris', f"{float(selected_row.get('close')):.2f}" if selected_row.get('close') is not None else '')
-    st.markdown(str(selected_row.get('risk_explanation_no') or ''))
+    st.markdown(incumbent_candidate_explanation(selected_row))
     st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
 
     chart_detail = st.cache_data(show_spinner=False)(build_selected_ticker_chart_detail)(
@@ -196,7 +205,7 @@ def render() -> None:
     )
     st.subheader('Prischart')
     _render_price_chart(chart_detail)
-    st.subheader('Benchmark og relativ styrke')
+    st.subheader('Normalisert benchmark-sammenligning og relativ styrke')
     _render_relative_strength_chart(chart_detail)
 
     with st.expander('Tekniske detaljer', expanded=False):

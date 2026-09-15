@@ -105,9 +105,13 @@ class ScreenerPageTests(unittest.TestCase):
         ui_module.build_incumbent_screener_ui_result = _fail
         ui_module.build_selected_ticker_chart_detail = _fail
         ui_module.build_selected_ticker_detail = _fail
+        ui_module.incumbent_candidate_explanation = _fail
         ui_module.incumbent_candidate_detail_rows = _fail
         ui_module.incumbent_screener_eligible_table_rows = _fail
+        ui_module.incumbent_screener_summary_rows = _fail
         ui_module.incumbent_screener_table_rows = _fail
+        ui_module.incumbent_screener_ticker_options = _fail
+        ui_module.resolve_incumbent_selected_ticker = _fail
         ui_module.selected_incumbent_candidate = _fail
         runtime_module = types.ModuleType('tradetool.config.runtime_settings')
         runtime_module.inspect_app_database = lambda: types.SimpleNamespace(
@@ -171,3 +175,4 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("st.expander('Tekniske detaljer'", source)
         self.assertIn('incumbent_screener_table_rows', source)
         self.assertIn('build_selected_ticker_chart_detail', source)
+        self.assertIn("st.selectbox('Valgt kandidat'", source)
