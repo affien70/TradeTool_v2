@@ -103,6 +103,8 @@ class ScreenerPageTests(unittest.TestCase):
 
         ui_module.build_minimal_screener_result = _fail
         ui_module.build_incumbent_screener_ui_result = _fail
+        ui_module.build_price_chart_spec = _fail
+        ui_module.build_relative_strength_chart_spec = _fail
         ui_module.build_selected_ticker_chart_detail = _fail
         ui_module.build_selected_ticker_detail = _fail
         ui_module.incumbent_candidate_explanation = _fail

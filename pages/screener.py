@@ -8,6 +8,8 @@ import streamlit as st
 from tradetool.config.runtime_settings import inspect_app_database
 from tradetool.ui.screener import (
     build_incumbent_screener_ui_result,
+    build_price_chart_spec,
+    build_relative_strength_chart_spec,
     build_selected_ticker_chart_detail,
     incumbent_candidate_explanation,
     incumbent_candidate_detail_rows,
@@ -50,57 +52,31 @@ def _database_ready(status: object) -> bool:
 
 
 def _render_price_chart(chart_detail) -> None:
-    st.vega_lite_chart(
-        {'values': [point.to_dict() for point in chart_detail.price_points]},
-        {
-            'mark': {'type': 'line'},
-            'encoding': {
-                'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
-                'y': {'field': 'value', 'type': 'quantitative', 'title': 'Pris'},
-                'color': {'field': 'series', 'type': 'nominal', 'title': 'Serie'},
-            },
-            'transform': [
-                {'fold': ['close', 'sma50', 'sma200'], 'as': ['series', 'value']},
-                {'filter': 'isValid(datum.value)'},
-            ],
-            'height': 300,
-        },
-        use_container_width=True,
-    )
+    spec = build_price_chart_spec(chart_detail)
+    if spec is None:
+        st.warning(_chart_empty_warning(chart_detail))
+        return
+    st.vega_lite_chart(spec, use_container_width=True)
 
 
 def _render_relative_strength_chart(chart_detail) -> None:
     if chart_detail.warning:
         st.warning(chart_detail.warning)
-    st.vega_lite_chart(
-        {'values': [point.to_dict() for point in chart_detail.price_points]},
-        {
-            'vconcat': [
-                {
-                    'mark': {'type': 'line'},
-                    'encoding': {
-                        'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
-                        'y': {'field': 'value', 'type': 'quantitative', 'title': 'Indeksert verdi'},
-                        'color': {'field': 'series', 'type': 'nominal', 'title': 'Serie'},
-                    },
-                    'transform': [
-                        {'fold': ['indexed_close', 'indexed_benchmark'], 'as': ['series', 'value']},
-                        {'filter': 'isValid(datum.value)'},
-                    ],
-                    'height': 210,
-                },
-                {
-                    'mark': {'type': 'line', 'color': '#f97316'},
-                    'encoding': {
-                        'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
-                        'y': {'field': 'relative_strength_line', 'type': 'quantitative', 'title': 'RS-linje'},
-                    },
-                    'transform': [{'filter': 'isValid(datum.relative_strength_line)'}],
-                    'height': 150,
-                },
-            ]
-        },
-        use_container_width=True,
+    spec = build_relative_strength_chart_spec(chart_detail)
+    if spec is None:
+        st.warning(_chart_empty_warning(chart_detail))
+        return
+    st.vega_lite_chart(spec, use_container_width=True)
+
+
+def _chart_empty_warning(chart_detail) -> str:
+    return (
+        f'Mangler grafdata for {chart_detail.ticker}. '
+        f'Benchmark: {chart_detail.benchmark_ticker or "ingen"}. '
+        f'Forespurt periode: {chart_detail.requested_start_date or "ukjent"} til '
+        f'{chart_detail.requested_end_date or "ukjent"}. '
+        f'Rader funnet for ticker: {chart_detail.ticker_rows_found}. '
+        f'Rader funnet for benchmark: {chart_detail.benchmark_rows_found}.'
     )
 
 
@@ -202,6 +178,7 @@ def render() -> None:
         benchmark_ticker=incumbent_result.benchmark_ticker,
         price_table='price_history_v2',
         data_source=incumbent_result.data_source,
+        max_price_date=date.fromisoformat(str(incumbent_result.as_of_date)),
     )
     st.subheader('Prischart')
     _render_price_chart(chart_detail)

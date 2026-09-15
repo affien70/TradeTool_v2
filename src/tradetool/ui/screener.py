@@ -4,6 +4,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import math
+from datetime import date
 from pathlib import Path
 
 from tradetool.data import ReadOnlySQLite, load_price_history_for_tickers, load_price_history_v2_for_tickers
@@ -191,6 +192,10 @@ class SelectedTickerChartDetail:
     lookback_rows: int
     price_points: tuple[ScreenerChartPoint, ...]
     loaded_tickers: tuple[str, ...]
+    requested_start_date: str | None = None
+    requested_end_date: str | None = None
+    ticker_rows_found: int = 0
+    benchmark_rows_found: int = 0
     warning: str | None = None
 
 
@@ -546,22 +551,41 @@ def build_selected_ticker_chart_detail(
     lookback_rows: int = 252,
     price_table: str = 'price_history',
     data_source: str = 'yahoo',
+    max_price_date: date | None = None,
 ) -> SelectedTickerChartDetail:
     database = ReadOnlySQLite(db_path)
     tickers = [ticker]
     if benchmark_ticker:
         tickers.append(benchmark_ticker)
     if price_table == PRICE_TABLE_V2:
-        loaded = load_price_history_v2_for_tickers(db_path=str(db_path), tickers=tickers, data_source=data_source, database=database)
+        loaded = load_price_history_v2_for_tickers(
+            db_path=str(db_path),
+            tickers=tickers,
+            data_source=data_source,
+            max_price_date=max_price_date,
+            database=database,
+        )
         loaded_rows_by_ticker = loaded.as_feature_rows_by_ticker()
     else:
         loaded = load_price_history_for_tickers(database=database, tickers=tickers, price_table=price_table)
         loaded_rows_by_ticker = loaded.rows_by_ticker
+        if max_price_date is not None:
+            loaded_rows_by_ticker = {
+                loaded_ticker: tuple(row for row in rows if row.price_date <= max_price_date)
+                for loaded_ticker, rows in loaded_rows_by_ticker.items()
+            }
     ticker_rows = list(loaded_rows_by_ticker.get(ticker.upper(), ()))
     if not ticker_rows:
-        raise ValueError(f'Mangler prisdata for valgt ticker: {ticker}')
+        raise ValueError(
+            'Mangler prisdata for valgt ticker: '
+            f'{ticker}. Benchmark: {benchmark_ticker or "ingen"}. '
+            f'Dato til og med: {max_price_date.isoformat() if max_price_date else "siste tilgjengelige"}. '
+            'Rader funnet for ticker: 0.'
+        )
     limited_rows = ticker_rows[-lookback_rows:]
     benchmark_rows = list(loaded_rows_by_ticker.get(benchmark_ticker.upper(), ())) if benchmark_ticker else []
+    requested_start_date = limited_rows[0].price_date.isoformat() if limited_rows else None
+    requested_end_date = limited_rows[-1].price_date.isoformat() if limited_rows else None
     benchmark_by_date = {row.price_date.isoformat(): row.close for row in benchmark_rows}
 
     if benchmark_ticker and not benchmark_rows:
@@ -571,7 +595,15 @@ def build_selected_ticker_chart_detail(
             lookback_rows=lookback_rows,
             price_points=_build_price_points(limited_rows, benchmark_by_date={}),
             loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
-            warning=f'Mangler benchmark-data for {benchmark_ticker}. Viser kun prisserien for valgt ticker.',
+            requested_start_date=requested_start_date,
+            requested_end_date=requested_end_date,
+            ticker_rows_found=len(ticker_rows),
+            benchmark_rows_found=0,
+            warning=(
+                f'Mangler benchmark-data for {benchmark_ticker}. Viser kun prisserien for {ticker.upper()}. '
+                f'Forespurt periode: {requested_start_date or "ukjent"} til {requested_end_date or "ukjent"}. '
+                f'Rader funnet for ticker: {len(ticker_rows)}. Rader funnet for benchmark: 0.'
+            ),
         )
 
     aligned_dates = [row.price_date.isoformat() for row in limited_rows if not benchmark_ticker or row.price_date.isoformat() in benchmark_by_date]
@@ -582,7 +614,15 @@ def build_selected_ticker_chart_detail(
             lookback_rows=lookback_rows,
             price_points=_build_price_points(limited_rows, benchmark_by_date={}),
             loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
-            warning=f'Kunne ikke justere datoer mellom {ticker.upper()} og {benchmark_ticker}.',
+            requested_start_date=requested_start_date,
+            requested_end_date=requested_end_date,
+            ticker_rows_found=len(ticker_rows),
+            benchmark_rows_found=len(benchmark_rows),
+            warning=(
+                f'Kunne ikke justere datoer mellom {ticker.upper()} og {benchmark_ticker}. '
+                f'Forespurt periode: {requested_start_date or "ukjent"} til {requested_end_date or "ukjent"}. '
+                f'Rader funnet for ticker: {len(ticker_rows)}. Rader funnet for benchmark: {len(benchmark_rows)}.'
+            ),
         )
 
     if benchmark_ticker:
@@ -598,8 +638,65 @@ def build_selected_ticker_chart_detail(
         lookback_rows=lookback_rows,
         price_points=_build_price_points(filtered_rows, benchmark_by_date=filtered_benchmark),
         loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
+        requested_start_date=(filtered_rows[0].price_date.isoformat() if filtered_rows else requested_start_date),
+        requested_end_date=(filtered_rows[-1].price_date.isoformat() if filtered_rows else requested_end_date),
+        ticker_rows_found=len(ticker_rows),
+        benchmark_rows_found=len(benchmark_rows),
         warning=None,
     )
+
+
+def build_price_chart_spec(chart_detail: SelectedTickerChartDetail) -> dict[str, object] | None:
+    values = [point.to_dict() for point in chart_detail.price_points]
+    if not values:
+        return None
+    return {
+        'data': {'values': values},
+        'mark': {'type': 'line'},
+        'encoding': {
+            'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
+            'y': {'field': 'value', 'type': 'quantitative', 'title': 'Pris'},
+            'color': {'field': 'series', 'type': 'nominal', 'title': 'Serie'},
+        },
+        'transform': [
+            {'fold': ['close', 'sma50', 'sma200'], 'as': ['series', 'value']},
+            {'filter': 'isValid(datum.value)'},
+        ],
+        'height': 300,
+    }
+
+
+def build_relative_strength_chart_spec(chart_detail: SelectedTickerChartDetail) -> dict[str, object] | None:
+    values = [point.to_dict() for point in chart_detail.price_points]
+    if not values:
+        return None
+    return {
+        'data': {'values': values},
+        'vconcat': [
+            {
+                'mark': {'type': 'line'},
+                'encoding': {
+                    'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
+                    'y': {'field': 'value', 'type': 'quantitative', 'title': 'Indeksert verdi'},
+                    'color': {'field': 'series', 'type': 'nominal', 'title': 'Serie'},
+                },
+                'transform': [
+                    {'fold': ['indexed_close', 'indexed_benchmark'], 'as': ['series', 'value']},
+                    {'filter': 'isValid(datum.value)'},
+                ],
+                'height': 210,
+            },
+            {
+                'mark': {'type': 'line', 'color': '#f97316'},
+                'encoding': {
+                    'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
+                    'y': {'field': 'relative_strength_line', 'type': 'quantitative', 'title': 'RS-linje'},
+                },
+                'transform': [{'filter': 'isValid(datum.relative_strength_line)'}],
+                'height': 150,
+            },
+        ],
+    }
 
 
 def _build_signal_type_matrix(rows: Sequence) -> tuple[CandidateSignalMatrixRow, ...]:

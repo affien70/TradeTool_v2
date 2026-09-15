@@ -28,6 +28,8 @@ from tradetool.ui.screener import (
     PRICE_TABLE_V2,
     build_incumbent_screener_ui_result,
     build_minimal_screener_result,
+    build_price_chart_spec,
+    build_relative_strength_chart_spec,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
     incumbent_candidate_explanation,
@@ -296,6 +298,50 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         self.assertEqual(set(chart.loaded_tickers), {'CAMBI.OL', 'OSEBX.OL'})
         self.assertEqual(chart.price_points[-1].close, 339.0)
         self.assertIsNone(chart.warning)
+        price_spec = build_price_chart_spec(chart)
+        benchmark_spec = build_relative_strength_chart_spec(chart)
+        self.assertIsNotNone(price_spec)
+        self.assertIsNotNone(benchmark_spec)
+        assert price_spec is not None
+        assert benchmark_spec is not None
+        self.assertGreater(len(price_spec['data']['values']), 0)
+        self.assertEqual(price_spec['transform'][0]['fold'], ['close', 'sma50', 'sma200'])
+        self.assertEqual(benchmark_spec['vconcat'][0]['transform'][0]['fold'], ['indexed_close', 'indexed_benchmark'])
+        db_path.unlink()
+
+    def test_v2_chart_respects_as_of_cap(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_cap.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            max_price_date=date(2025, 7, 1),
+        )
+        self.assertLessEqual(max(point.price_date for point in chart.price_points), '2025-07-01')
+        db_path.unlink()
+
+    def test_v2_chart_missing_benchmark_reports_rows_in_warning(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_missing_benchmark.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='MISSING.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+        )
+        self.assertIsNotNone(chart.warning)
+        self.assertIn('Rader funnet for ticker: 260', str(chart.warning))
+        self.assertIn('Rader funnet for benchmark: 0', str(chart.warning))
+        self.assertGreater(len(chart.price_points), 0)
+        self.assertIsNotNone(build_price_chart_spec(chart))
         db_path.unlink()
 
     def test_v2_mode_does_not_write_to_database(self) -> None:
