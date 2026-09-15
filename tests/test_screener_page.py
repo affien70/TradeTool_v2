@@ -171,6 +171,15 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn('UNIVERSE_BENCHMARKS', source)
         self.assertIn('Ingen lokal app-database funnet. Gå til Innstillinger eller bygg lokal database før screening.', source)
 
+    def test_screener_page_keeps_screening_date_in_advanced_controls(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertNotIn("date_input('Dato'", source)
+        self.assertIn("st.expander('Avansert'", source)
+        self.assertIn("date_input(\n            'Screeningdato'", source)
+        self.assertIn('Screeningdato brukes for historisk testing. I vanlig bruk velges siste tilgjengelige prisdato automatisk.', source)
+        self.assertIn("date.fromisoformat(str(latest_price_date))", source)
+        self.assertIn('Bruker markedsdata til og med:', source)
+
     def test_screener_page_keeps_debug_details_out_of_main_screen(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
         self.assertNotIn('st.json(', source)

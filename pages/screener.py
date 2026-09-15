@@ -27,6 +27,7 @@ UNIVERSE_BENCHMARKS = {
 }
 DATA_SOURCE_OPTIONS = ('yahoo',)
 MISSING_DB_MESSAGE = 'Ingen lokal app-database funnet. Gå til Innstillinger eller bygg lokal database før screening.'
+SCREENING_DATE_HELP = 'Screeningdato brukes for historisk testing. I vanlig bruk velges siste tilgjengelige prisdato automatisk.'
 
 
 def _show_database_status() -> object:
@@ -49,6 +50,16 @@ def _show_database_status() -> object:
 
 def _database_ready(status: object) -> bool:
     return bool(status.exists and status.readable and status.price_history_v2_table_exists)
+
+
+def _default_screening_date(status: object) -> date:
+    latest_price_date = getattr(status, 'latest_price_date', None)
+    if latest_price_date:
+        try:
+            return date.fromisoformat(str(latest_price_date))
+        except ValueError:
+            pass
+    return date.today()
 
 
 def _render_price_chart(chart_detail) -> None:
@@ -84,6 +95,7 @@ def render() -> None:
     st.title('Aksje-screener')
     st.caption('V1-lignende flyt med V2 incumbent screener-kjerne. Risikotagger er informasjon, ikke filtre.')
     db_status = _show_database_status()
+    default_screening_date = _default_screening_date(db_status)
 
     control_left, control_right = st.columns([1.6, 1.0])
     with control_left:
@@ -91,9 +103,16 @@ def render() -> None:
         benchmark_ticker = UNIVERSE_BENCHMARKS[universe_id]
         data_source = st.selectbox('Datakilde', options=list(DATA_SOURCE_OPTIONS), index=0, key='incumbent_data_source')
     with control_right:
-        as_of_date = st.date_input('Dato', value=date.today(), key='incumbent_as_of_date')
         top_n = int(st.number_input('Top N', min_value=1, max_value=100, value=10, step=1, key='incumbent_top_n'))
         run_clicked = st.button('Kjør screener', key='incumbent_run_button', type='primary')
+    with st.expander('Avansert', expanded=False):
+        as_of_date = st.date_input(
+            'Screeningdato',
+            value=default_screening_date,
+            key='incumbent_as_of_date',
+            help=SCREENING_DATE_HELP,
+        )
+        st.caption(SCREENING_DATE_HELP)
     st.caption(f'Benchmark: {benchmark_ticker} | Motor: incumbent_naive_rs_6m_top_10_v0 | Close: adjusted_close')
 
     if run_clicked:
@@ -125,6 +144,7 @@ def render() -> None:
     summary_columns = st.columns(5)
     for column, row in zip(summary_columns, incumbent_screener_summary_rows(incumbent_result), strict=True):
         column.metric(str(row['felt']), row['verdi'])
+    st.caption(f'Bruker markedsdata til og med: {incumbent_result.effective_feature_date or incumbent_result.as_of_date}')
 
     table_rows = incumbent_screener_table_rows(incumbent_result)
     st.subheader('Rangerte kandidater')
