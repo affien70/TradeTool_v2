@@ -67,7 +67,7 @@ def _render_price_chart(chart_detail) -> None:
     if spec is None:
         st.warning(_chart_empty_warning(chart_detail))
         return
-    st.vega_lite_chart(spec, use_container_width=True)
+    st.vega_lite_chart(spec, use_container_width=True, key=f'price_chart_{chart_detail.ticker}_{chart_detail.requested_end_date}')
 
 
 def _render_relative_strength_chart(chart_detail) -> None:
@@ -77,7 +77,7 @@ def _render_relative_strength_chart(chart_detail) -> None:
     if spec is None:
         st.warning(_chart_empty_warning(chart_detail))
         return
-    st.vega_lite_chart(spec, use_container_width=True)
+    st.vega_lite_chart(spec, use_container_width=True, key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.requested_end_date}')
 
 
 def _chart_empty_warning(chart_detail) -> str:
@@ -88,6 +88,25 @@ def _chart_empty_warning(chart_detail) -> str:
         f'{chart_detail.requested_end_date or "ukjent"}. '
         f'Rader funnet for ticker: {chart_detail.ticker_rows_found}. '
         f'Rader funnet for benchmark: {chart_detail.benchmark_rows_found}.'
+    )
+
+
+@st.cache_data(show_spinner=False)
+def _cached_selected_ticker_chart_detail(
+    *,
+    db_path_text: str,
+    selected_ticker: str,
+    benchmark_ticker: str,
+    data_source: str,
+    as_of_date_text: str,
+):
+    return build_selected_ticker_chart_detail(
+        db_path=Path(db_path_text),
+        ticker=selected_ticker,
+        benchmark_ticker=benchmark_ticker,
+        price_table='price_history_v2',
+        data_source=data_source,
+        max_price_date=date.fromisoformat(as_of_date_text),
     )
 
 
@@ -184,6 +203,7 @@ def render() -> None:
         return
 
     selected_row = selected_incumbent_candidate(incumbent_result, ticker=selected_ticker)
+    detail_ticker = str(selected_row.get('ticker') or selected_ticker).strip().upper()
     detail_columns = st.columns(4)
     detail_columns[0].metric('Ticker', selected_row.get('ticker'))
     detail_columns[1].metric('Incumbent-rang', selected_row.get('incumbent_rank'))
@@ -192,13 +212,12 @@ def render() -> None:
     st.markdown(incumbent_candidate_explanation(selected_row))
     st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
 
-    chart_detail = st.cache_data(show_spinner=False)(build_selected_ticker_chart_detail)(
-        db_path=Path(db_status.configured_path),
-        ticker=selected_ticker,
-        benchmark_ticker=incumbent_result.benchmark_ticker,
-        price_table='price_history_v2',
-        data_source=incumbent_result.data_source,
-        max_price_date=date.fromisoformat(str(incumbent_result.as_of_date)),
+    chart_detail = _cached_selected_ticker_chart_detail(
+        db_path_text=str(db_status.configured_path),
+        selected_ticker=detail_ticker,
+        benchmark_ticker=str(incumbent_result.benchmark_ticker),
+        data_source=str(incumbent_result.data_source),
+        as_of_date_text=str(incumbent_result.as_of_date),
     )
     st.subheader('Prischart')
     _render_price_chart(chart_detail)
@@ -206,6 +225,18 @@ def render() -> None:
     _render_relative_strength_chart(chart_detail)
 
     with st.expander('Tekniske detaljer', expanded=False):
+        st.dataframe(
+            [
+                {'felt': 'selected_ticker_detail', 'verdi': detail_ticker},
+                {'felt': 'selected_ticker_price_chart', 'verdi': chart_detail.ticker},
+                {'felt': 'selected_ticker_benchmark_chart', 'verdi': chart_detail.ticker},
+                {'felt': 'chart_row_count', 'verdi': len(chart_detail.price_points)},
+                {'felt': 'chart_first_date', 'verdi': chart_detail.requested_start_date},
+                {'felt': 'chart_last_date', 'verdi': chart_detail.requested_end_date},
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
         st.dataframe(incumbent_screener_eligible_table_rows(incumbent_result), use_container_width=True, hide_index=True)
         st.dataframe(list(incumbent_result.rejections), use_container_width=True, hide_index=True)
         st.dataframe(

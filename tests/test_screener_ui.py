@@ -296,6 +296,7 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             data_source='yahoo',
         )
         self.assertEqual(set(chart.loaded_tickers), {'CAMBI.OL', 'OSEBX.OL'})
+        self.assertTrue(all(point.ticker == 'CAMBI.OL' for point in chart.price_points))
         self.assertEqual(chart.price_points[-1].close, 339.0)
         self.assertIsNone(chart.warning)
         price_spec = build_price_chart_spec(chart)
@@ -305,8 +306,40 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         assert price_spec is not None
         assert benchmark_spec is not None
         self.assertGreater(len(price_spec['data']['values']), 0)
+        self.assertEqual({row['ticker'] for row in price_spec['data']['values']}, {'CAMBI.OL'})
         self.assertEqual(price_spec['transform'][0]['fold'], ['close', 'sma50', 'sma200'])
         self.assertEqual(benchmark_spec['vconcat'][0]['transform'][0]['fold'], ['indexed_close', 'indexed_benchmark'])
+        db_path.unlink()
+
+    def test_v2_chart_data_changes_with_selected_ticker(self) -> None:
+        db_path = Path('/tmp/tradetool_v2_screener_ui_chart_selection.sqlite')
+        if db_path.exists():
+            db_path.unlink()
+        _build_fixture_v2_db(db_path)
+        cambi_chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='CAMBI.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            max_price_date=date(2025, 9, 17),
+        )
+        sntia_chart = build_selected_ticker_chart_detail(
+            db_path=db_path,
+            ticker='SNTIA.OL',
+            benchmark_ticker='OSEBX.OL',
+            price_table=PRICE_TABLE_V2,
+            data_source='yahoo',
+            max_price_date=date(2025, 9, 17),
+        )
+        cambi_spec = build_price_chart_spec(cambi_chart)
+        sntia_spec = build_price_chart_spec(sntia_chart)
+        assert cambi_spec is not None and sntia_spec is not None
+
+        self.assertEqual({row['ticker'] for row in cambi_spec['data']['values']}, {'CAMBI.OL'})
+        self.assertEqual({row['ticker'] for row in sntia_spec['data']['values']}, {'SNTIA.OL'})
+        self.assertNotEqual(cambi_spec['data']['values'][-1]['close'], sntia_spec['data']['values'][-1]['close'])
+        self.assertNotEqual(cambi_chart.ticker, sntia_chart.ticker)
         db_path.unlink()
 
     def test_v2_chart_respects_as_of_cap(self) -> None:

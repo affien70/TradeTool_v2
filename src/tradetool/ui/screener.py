@@ -163,6 +163,7 @@ class SelectedTickerDetail:
 
 @dataclass(frozen=True, slots=True)
 class ScreenerChartPoint:
+    ticker: str
     price_date: str
     close: float
     sma50: float | None
@@ -174,6 +175,7 @@ class ScreenerChartPoint:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            'ticker': self.ticker,
             'price_date': self.price_date,
             'close': self.close,
             'sma50': self.sma50,
@@ -593,7 +595,7 @@ def build_selected_ticker_chart_detail(
             ticker=ticker.upper(),
             benchmark_ticker=benchmark_ticker,
             lookback_rows=lookback_rows,
-            price_points=_build_price_points(limited_rows, benchmark_by_date={}),
+            price_points=_build_price_points(ticker=ticker.upper(), rows=limited_rows, benchmark_by_date={}),
             loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
             requested_start_date=requested_start_date,
             requested_end_date=requested_end_date,
@@ -612,7 +614,7 @@ def build_selected_ticker_chart_detail(
             ticker=ticker.upper(),
             benchmark_ticker=benchmark_ticker,
             lookback_rows=lookback_rows,
-            price_points=_build_price_points(limited_rows, benchmark_by_date={}),
+            price_points=_build_price_points(ticker=ticker.upper(), rows=limited_rows, benchmark_by_date={}),
             loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
             requested_start_date=requested_start_date,
             requested_end_date=requested_end_date,
@@ -636,7 +638,7 @@ def build_selected_ticker_chart_detail(
         ticker=ticker.upper(),
         benchmark_ticker=benchmark_ticker,
         lookback_rows=lookback_rows,
-        price_points=_build_price_points(filtered_rows, benchmark_by_date=filtered_benchmark),
+        price_points=_build_price_points(ticker=ticker.upper(), rows=filtered_rows, benchmark_by_date=filtered_benchmark),
         loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
         requested_start_date=(filtered_rows[0].price_date.isoformat() if filtered_rows else requested_start_date),
         requested_end_date=(filtered_rows[-1].price_date.isoformat() if filtered_rows else requested_end_date),
@@ -734,7 +736,7 @@ def _common_v2_alignment_date(feature_rows: Sequence) -> str | None:
     return min(dates) if dates else None
 
 
-def _build_price_points(rows, *, benchmark_by_date: Mapping[str, float]) -> tuple[ScreenerChartPoint, ...]:
+def _build_price_points(*, ticker: str, rows, benchmark_by_date: Mapping[str, float]) -> tuple[ScreenerChartPoint, ...]:
     closes = [float(row.close) for row in rows]
     stock_indexed = _indexed_series(closes)
     benchmark_closes = [benchmark_by_date.get(row.price_date.isoformat()) for row in rows]
@@ -758,6 +760,7 @@ def _build_price_points(rows, *, benchmark_by_date: Mapping[str, float]) -> tupl
             relative_strength_line = (indexed_close / indexed_benchmark) * 100.0
         points.append(
             ScreenerChartPoint(
+                ticker=ticker,
                 price_date=date_key,
                 close=float(row.close),
                 sma50=sma50,

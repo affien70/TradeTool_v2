@@ -187,3 +187,21 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn('incumbent_screener_table_rows', source)
         self.assertIn('build_selected_ticker_chart_detail', source)
         self.assertIn("st.selectbox('Valgt kandidat'", source)
+
+    def test_screener_page_uses_one_selected_ticker_for_detail_and_charts(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertIn("detail_ticker = str(selected_row.get('ticker') or selected_ticker).strip().upper()", source)
+        self.assertIn('selected_ticker=detail_ticker', source)
+        self.assertIn("'selected_ticker_detail'", source)
+        self.assertIn("'selected_ticker_price_chart'", source)
+        self.assertIn("'selected_ticker_benchmark_chart'", source)
+        self.assertIn("key=f'price_chart_{chart_detail.ticker}_{chart_detail.requested_end_date}'", source)
+        self.assertIn("key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.requested_end_date}'", source)
+
+    def test_chart_cache_inputs_include_ticker_and_as_of_date(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertIn('def _cached_selected_ticker_chart_detail(', source)
+        self.assertIn('selected_ticker: str', source)
+        self.assertIn('benchmark_ticker: str', source)
+        self.assertIn('data_source: str', source)
+        self.assertIn('as_of_date_text: str', source)
