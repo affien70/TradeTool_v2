@@ -46,8 +46,9 @@ class _StreamlitStub:
             return func
         return decorator
 
-    def columns(self, count: int):
-        return [self for _ in range(count)]
+    def columns(self, count):
+        resolved_count = len(count) if isinstance(count, list) else int(count)
+        return [self for _ in range(resolved_count)]
 
     def checkbox(self, *args, **kwargs) -> bool:
         return False
@@ -104,7 +105,10 @@ class ScreenerPageTests(unittest.TestCase):
         ui_module.build_incumbent_screener_ui_result = _fail
         ui_module.build_selected_ticker_chart_detail = _fail
         ui_module.build_selected_ticker_detail = _fail
+        ui_module.incumbent_candidate_detail_rows = _fail
+        ui_module.incumbent_screener_eligible_table_rows = _fail
         ui_module.incumbent_screener_table_rows = _fail
+        ui_module.selected_incumbent_candidate = _fail
         runtime_module = types.ModuleType('tradetool.config.runtime_settings')
         runtime_module.inspect_app_database = lambda: types.SimpleNamespace(
             configured_path=Path('/tmp/missing.sqlite'),
@@ -144,10 +148,10 @@ class ScreenerPageTests(unittest.TestCase):
 
     def test_screener_page_has_no_automatic_db_access_on_page_load(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
-        self.assertIn("if st.button('Kjør diagnostisk screener')", source)
-        prefix = source.split("if st.button('Kjør diagnostisk screener')", 1)[0]
-        self.assertNotIn('build_minimal_screener_result(', prefix)
-        self.assertIn("st.session_state.get('screener_result')", source)
+        self.assertIn("st.button('Kjør screener'", source)
+        prefix = source.split("if run_clicked:", 1)[0]
+        self.assertNotIn('build_incumbent_screener_ui_result(', prefix)
+        self.assertIn("st.session_state.get('incumbent_screener_result')", source)
 
     def test_screener_page_uses_configured_database_and_dropdown_inputs(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
@@ -156,7 +160,14 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertNotIn("st.text_input('Lokal kopi av SQLite-database'", source)
         self.assertNotIn("st.text_input('Universe ID'", source)
         self.assertNotIn("st.text_input('Benchmark ticker'", source)
-        self.assertIn("selectbox('Universe'", source)
-        self.assertIn("selectbox('Data source'", source)
+        self.assertIn("selectbox('Univers'", source)
+        self.assertIn("selectbox('Datakilde'", source)
         self.assertIn('UNIVERSE_BENCHMARKS', source)
         self.assertIn('Ingen lokal app-database funnet. Gå til Innstillinger eller bygg lokal database før screening.', source)
+
+    def test_screener_page_keeps_debug_details_out_of_main_screen(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertNotIn('st.json(', source)
+        self.assertIn("st.expander('Tekniske detaljer'", source)
+        self.assertIn('incumbent_screener_table_rows', source)
+        self.assertIn('build_selected_ticker_chart_detail', source)

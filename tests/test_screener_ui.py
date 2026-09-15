@@ -30,6 +30,8 @@ from tradetool.ui.screener import (
     build_minimal_screener_result,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
+    incumbent_candidate_detail_rows,
+    selected_incumbent_candidate,
     incumbent_screener_table_rows,
 )
 
@@ -338,20 +340,24 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         self.assertEqual(result.baseline_id, 'incumbent_naive_rs_6m_top_10_v0')
         self.assertEqual(len(rows), 2)
         self.assertEqual(list(rows[0]), [
-            'incumbent_rank',
-            'ticker',
-            'relative_strength_6m',
-            'relative_strength_3m',
-            'return_6m',
-            'return_3m',
-            'close',
-            'risk_level',
-            'risk_tags',
-            'risk_explanation_no',
+            'Rank',
+            'Ticker',
+            'RS 6m',
+            'RS 3m',
+            '6m',
+            '3m',
+            'Pris',
+            'Risiko',
+            'Risikotagger',
+            'Forklaring',
         ])
-        self.assertIn(rows[0]['risk_level'], {'LOW', 'MEDIUM', 'HIGH'})
-        self.assertIsInstance(rows[0]['risk_explanation_no'], str)
+        self.assertIn(rows[0]['Risiko'], {'LOW', 'MEDIUM', 'HIGH'})
+        self.assertIsInstance(rows[0]['Forklaring'], str)
         self.assertNotIn('ml_score', rows[0])
         self.assertNotIn('holdings_signal', rows[0])
+        selected = selected_incumbent_candidate(result, ticker=str(rows[0]['Ticker']))
+        detail_rows = incumbent_candidate_detail_rows(selected)
+        self.assertIn({'felt': 'Ticker', 'verdi': rows[0]['Ticker']}, detail_rows)
+        self.assertTrue(any(row['felt'] == 'Risikotagger' for row in detail_rows))
         db_path.unlink()
         universe_path.unlink()

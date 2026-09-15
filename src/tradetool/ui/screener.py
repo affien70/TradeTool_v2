@@ -210,19 +210,86 @@ def build_incumbent_screener_ui_result(
 
 
 def incumbent_screener_table_rows(result) -> list[dict[str, object]]:
-    fields = (
-        'incumbent_rank',
-        'ticker',
-        'relative_strength_6m',
-        'relative_strength_3m',
-        'return_6m',
-        'return_3m',
-        'close',
-        'risk_level',
-        'risk_tags',
-        'risk_explanation_no',
-    )
-    return [{field: row.get(field) for field in fields} for row in result.top_candidates]
+    return [_incumbent_display_row(row) for row in result.top_candidates]
+
+
+def incumbent_screener_eligible_table_rows(result) -> list[dict[str, object]]:
+    return [_incumbent_display_row(row) for row in result.eligible_universe]
+
+
+def selected_incumbent_candidate(result, *, ticker: str) -> Mapping[str, object]:
+    cleaned_ticker = str(ticker or '').strip().upper()
+    for row in result.eligible_universe:
+        if str(row.get('ticker') or '').strip().upper() == cleaned_ticker:
+            return row
+    raise ValueError(f'Ticker not found in current incumbent screener result: {ticker}')
+
+
+def incumbent_candidate_detail_rows(row: Mapping[str, object]) -> list[dict[str, object]]:
+    return [
+        {'felt': 'Ticker', 'verdi': row.get('ticker')},
+        {'felt': 'Incumbent-rang', 'verdi': row.get('incumbent_rank')},
+        {'felt': '6m relativ styrke', 'verdi': _format_percent(row.get('relative_strength_6m'))},
+        {'felt': '3m relativ styrke', 'verdi': _format_percent(row.get('relative_strength_3m'))},
+        {'felt': '6m avkastning', 'verdi': _format_percent(row.get('return_6m'))},
+        {'felt': '3m avkastning', 'verdi': _format_percent(row.get('return_3m'))},
+        {'felt': 'Pris', 'verdi': _format_number(row.get('close'), decimals=2)},
+        {'felt': 'Over SMA200', 'verdi': _format_bool(row.get('above_sma200'))},
+        {'felt': 'Likviditet 20d', 'verdi': _format_number(row.get('average_traded_value_20'), decimals=0)},
+        {'felt': 'Drawdown 252d', 'verdi': _format_percent(row.get('drawdown_252'))},
+        {'felt': 'Volatilitet 63d', 'verdi': _format_percent(row.get('volatility_63'))},
+        {'felt': 'MA200-avstand', 'verdi': _format_percent(row.get('distance_to_sma200'))},
+        {'felt': 'Risikoklasse', 'verdi': row.get('risk_level')},
+        {'felt': 'Risikotagger', 'verdi': _format_tags(row.get('risk_tags'))},
+        {'felt': 'Forklaring', 'verdi': row.get('risk_explanation_no')},
+    ]
+
+
+def _incumbent_display_row(row: Mapping[str, object]) -> dict[str, object]:
+    return {
+        'Rank': row.get('incumbent_rank'),
+        'Ticker': row.get('ticker'),
+        'RS 6m': _format_percent(row.get('relative_strength_6m')),
+        'RS 3m': _format_percent(row.get('relative_strength_3m')),
+        '6m': _format_percent(row.get('return_6m')),
+        '3m': _format_percent(row.get('return_3m')),
+        'Pris': _format_number(row.get('close'), decimals=2),
+        'Risiko': row.get('risk_level'),
+        'Risikotagger': _format_tags(row.get('risk_tags')),
+        'Forklaring': row.get('risk_explanation_no'),
+    }
+
+
+def _format_number(value: object, *, decimals: int) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if not math.isfinite(numeric):
+        return ''
+    return f'{numeric:.{decimals}f}'
+
+
+def _format_percent(value: object) -> str:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return ''
+    if not math.isfinite(numeric):
+        return ''
+    return f'{numeric:.1%}'
+
+
+def _format_bool(value: object) -> str:
+    if value is True:
+        return 'Ja'
+    if value is False:
+        return 'Nei'
+    return ''
+
+
+def _format_tags(value: object) -> str:
+    return str(value or '').replace('|', ', ')
 
 
 def build_minimal_screener_result(
