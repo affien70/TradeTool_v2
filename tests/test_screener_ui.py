@@ -24,7 +24,7 @@ from tradetool.policy.trade_policy import (
     TRADE_POLICY_ENGINE_ID,
 )
 from tradetool.ui.screener import (
-    CHART_PERIOD_ROW_COUNTS,
+    CHART_PERIOD_CALENDAR_MONTHS,
     DEFAULT_CHART_PERIOD_LABEL,
     PRICE_TABLE_LEGACY,
     PRICE_TABLE_V2,
@@ -337,7 +337,8 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             data_source='yahoo',
             chart_period_label='3 mnd',
         )
-        self.assertEqual(len(three_month_chart.price_points), CHART_PERIOD_ROW_COUNTS['3 mnd'])
+        self.assertEqual(three_month_chart.calendar_start_date, '2025-06-17')
+        self.assertEqual(three_month_chart.requested_start_date, '2025-06-17')
         self.assertGreater(len(one_year_chart.price_points), len(three_month_chart.price_points))
         self.assertNotEqual(one_year_chart.requested_start_date, three_month_chart.requested_start_date)
 
@@ -396,10 +397,72 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             data_source='yahoo',
             chart_period_label='3 mnd',
         )
-        self.assertEqual(len(chart.price_points), CHART_PERIOD_ROW_COUNTS['3 mnd'])
+        self.assertEqual(chart.calendar_start_date, '2025-08-16')
+        self.assertEqual(chart.requested_start_date, '2025-08-16')
         self.assertEqual(chart.sma200_non_null_count, len(chart.price_points))
         self.assertIsNotNone(chart.price_points[0].sma200)
         db_path.unlink()
+
+    def test_chart_periods_use_calendar_start_and_first_trading_row(self) -> None:
+        with tempfile.TemporaryDirectory(dir='/tmp') as temp_dir:
+            db_path = Path(temp_dir) / 'calendar.sqlite'
+            initialize_market_data_schema(db_path)
+            rows: list[MarketDataRow] = []
+            current = date(2020, 9, 15)
+            as_of = date(2025, 9, 15)
+            while current <= as_of:
+                if current.weekday() < 5:
+                    close = 50.0 if current < date(2024, 9, 16) else 100.0
+                    if current >= date(2024, 9, 26):
+                        close = 200.0
+                    rows.append(_sample_v2_row(ticker='TEST.OL', price_date=current.isoformat(), raw_close=close, adjusted_close=close))
+                    rows.append(_sample_v2_row(ticker='OSEBX.OL', price_date=current.isoformat(), raw_close=300.0, adjusted_close=300.0))
+                current += timedelta(days=1)
+            write_market_data_rows_for_test(db_path=db_path, rows=rows, allow_test_db_write=True)
+
+            expected = {
+                '3 mnd': ('2025-06-15', '2025-06-16'),
+                '6 mnd': ('2025-03-15', '2025-03-17'),
+                '1 år': ('2024-09-15', '2024-09-16'),
+                '2 år': ('2023-09-15', '2023-09-15'),
+                '5 år': ('2020-09-15', '2020-09-15'),
+            }
+            self.assertEqual(set(expected) | {'Maks'}, set(CHART_PERIOD_CALENDAR_MONTHS))
+            for label, (calendar_start, first_trading_date) in expected.items():
+                with self.subTest(label=label):
+                    chart = build_selected_ticker_chart_detail(
+                        db_path=db_path, ticker='TEST.OL', benchmark_ticker='OSEBX.OL',
+                        price_table=PRICE_TABLE_V2, data_source='yahoo',
+                        max_price_date=as_of, chart_period_label=label,
+                    )
+                    self.assertEqual(chart.calendar_start_date, calendar_start)
+                    self.assertEqual(chart.requested_start_date, first_trading_date)
+                    self.assertEqual(chart.requested_end_date, as_of.isoformat())
+                    self.assertEqual(chart.close_source, 'adjusted_close')
+                    self.assertAlmostEqual(chart.price_points[0].indexed_close or 0.0, 100.0)
+                    self.assertAlmostEqual(chart.price_points[0].indexed_benchmark or 0.0, 100.0)
+                    self.assertAlmostEqual(chart.price_points[0].relative_strength_line or 0.0, 100.0)
+                    last = chart.price_points[-1]
+                    self.assertAlmostEqual(
+                        last.relative_strength_line or 0.0,
+                        (last.indexed_close or 0.0) / (last.indexed_benchmark or 1.0) * 100.0,
+                    )
+            one_year = build_selected_ticker_chart_detail(
+                db_path=db_path, ticker='TEST.OL', benchmark_ticker='OSEBX.OL',
+                price_table=PRICE_TABLE_V2, data_source='yahoo',
+                max_price_date=as_of, chart_period_label='1 år',
+            )
+            self.assertEqual(one_year.first_close, 100.0)
+            self.assertEqual(one_year.last_close, 200.0)
+            self.assertEqual(one_year.period_return_pct, 100.0)
+            self.assertIsNotNone(one_year.price_points[0].sma200)
+            max_chart = build_selected_ticker_chart_detail(
+                db_path=db_path, ticker='TEST.OL', benchmark_ticker='OSEBX.OL',
+                price_table=PRICE_TABLE_V2, data_source='yahoo',
+                max_price_date=as_of, chart_period_label='Maks',
+            )
+            self.assertIsNone(max_chart.calendar_start_date)
+            self.assertEqual(max_chart.requested_start_date, '2020-09-15')
 
     def test_v2_chart_normalization_and_rs_math_start_at_100(self) -> None:
         db_path = Path('/tmp/tradetool_v2_screener_ui_chart_math.sqlite')

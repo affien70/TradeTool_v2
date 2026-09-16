@@ -97,7 +97,7 @@ class ScreenerPageTests(unittest.TestCase):
                 setattr(streamlit_module, name, getattr(streamlit_stub, name))
 
         ui_module = types.ModuleType('tradetool.ui.screener')
-        ui_module.CHART_PERIOD_ROW_COUNTS = {'1 år': 252}
+        ui_module.CHART_PERIOD_CALENDAR_MONTHS = {'1 år': 12}
         ui_module.DEFAULT_CHART_PERIOD_LABEL = '1 år'
 
         def _fail(*args, **kwargs):
@@ -212,7 +212,7 @@ class ScreenerPageTests(unittest.TestCase):
     def test_screener_page_restores_chart_period_dropdown_without_changing_ranking_inputs(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
         self.assertIn("st.selectbox(\n        'Grafperiode'", source)
-        self.assertIn('CHART_PERIOD_ROW_COUNTS', source)
+        self.assertIn('CHART_PERIOD_CALENDAR_MONTHS', source)
         self.assertIn('DEFAULT_CHART_PERIOD_LABEL', source)
         self.assertIn('chart_period_label=chart_period_label', source)
         ranking_call = source.split('build_incumbent_screener_ui_result(', 1)[1].split(')', 1)[0]
@@ -222,6 +222,11 @@ class ScreenerPageTests(unittest.TestCase):
         source = Path('pages/screener.py').read_text(encoding='utf-8')
         expander_body = source.split("with st.expander('Tekniske detaljer'", 1)[1]
         self.assertIn("'chart_period'", expander_body)
+        self.assertIn("'chart_calendar_start_date'", expander_body)
+        self.assertIn("'chart_first_close'", expander_body)
+        self.assertIn("'chart_last_close'", expander_body)
+        self.assertIn("'chart_period_return_pct'", expander_body)
+        self.assertIn("'chart_close_source'", expander_body)
         self.assertIn("'chart_raw_rows_loaded'", expander_body)
         self.assertIn("'chart_visible_rows'", expander_body)
         self.assertIn("'chart_first_normalized_date'", expander_body)

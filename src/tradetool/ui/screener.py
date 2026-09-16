@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from calendar import monthrange
 import math
 from datetime import date
 from pathlib import Path
@@ -35,12 +36,12 @@ from tradetool.ui.v1_screener_adapter import (
 
 PRICE_TABLE_LEGACY = 'price_history'
 PRICE_TABLE_V2 = 'price_history_v2'
-CHART_PERIOD_ROW_COUNTS = {
-    '3 mnd': 63,
-    '6 mnd': 126,
-    '1 år': 252,
-    '2 år': 504,
-    '5 år': 1260,
+CHART_PERIOD_CALENDAR_MONTHS = {
+    '3 mnd': 3,
+    '6 mnd': 6,
+    '1 år': 12,
+    '2 år': 24,
+    '5 år': 60,
     'Maks': None,
 }
 DEFAULT_CHART_PERIOD_LABEL = '1 år'
@@ -216,6 +217,11 @@ class SelectedTickerChartDetail:
     sma50_non_null_count: int = 0
     sma200_non_null_count: int = 0
     warning: str | None = None
+    calendar_start_date: str | None = None
+    first_close: float | None = None
+    last_close: float | None = None
+    period_return_pct: float | None = None
+    close_source: str = 'close'
 
 
 def build_incumbent_screener_ui_result(
@@ -602,13 +608,30 @@ def build_selected_ticker_chart_detail(
             f'Dato til og med: {max_price_date.isoformat() if max_price_date else "siste tilgjengelige"}. '
             'Rader funnet for ticker: 0.'
         )
-    visible_row_count = _resolve_chart_period_rows(chart_period_label, fallback=lookback_rows)
-    limited_rows = ticker_rows if visible_row_count is None else ticker_rows[-visible_row_count:]
+    chart_end_date = max_price_date or ticker_rows[-1].price_date
+    calendar_start = _chart_calendar_start(chart_period_label, chart_end_date)
+    limited_rows = (
+        [row for row in ticker_rows if row.price_date >= calendar_start]
+        if calendar_start is not None else ticker_rows
+    )
     benchmark_rows = list(loaded_rows_by_ticker.get(benchmark_ticker.upper(), ())) if benchmark_ticker else []
     requested_start_date = limited_rows[0].price_date.isoformat() if limited_rows else None
     requested_end_date = limited_rows[-1].price_date.isoformat() if limited_rows else None
     benchmark_by_date = {row.price_date.isoformat(): row.close for row in benchmark_rows}
     sma_lookup = _build_sma_lookup(ticker_rows)
+    chart_metadata = {
+        'calendar_start_date': calendar_start.isoformat() if calendar_start else None,
+        'close_source': 'adjusted_close' if price_table == PRICE_TABLE_V2 else 'close',
+    }
+
+    if not limited_rows:
+        return SelectedTickerChartDetail(
+            ticker=ticker.upper(), benchmark_ticker=benchmark_ticker, lookback_rows=lookback_rows,
+            price_points=(), loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
+            chart_period_label=chart_period_label, requested_end_date=chart_end_date.isoformat(),
+            ticker_rows_found=len(ticker_rows), benchmark_rows_found=len(benchmark_rows),
+            warning=f'Ingen prisdata for {ticker.upper()} i valgt grafperiode.', **chart_metadata,
+        )
 
     if benchmark_ticker and not benchmark_rows:
         return SelectedTickerChartDetail(
@@ -628,6 +651,10 @@ def build_selected_ticker_chart_detail(
                 f'Forespurt periode: {requested_start_date or "ukjent"} til {requested_end_date or "ukjent"}. '
                 f'Rader funnet for ticker: {len(ticker_rows)}. Rader funnet for benchmark: 0.'
             ),
+            first_close=float(limited_rows[0].close),
+            last_close=float(limited_rows[-1].close),
+            period_return_pct=_chart_return_pct(limited_rows),
+            **chart_metadata,
         )
 
     aligned_dates = [row.price_date.isoformat() for row in limited_rows if not benchmark_ticker or row.price_date.isoformat() in benchmark_by_date]
@@ -649,6 +676,10 @@ def build_selected_ticker_chart_detail(
                 f'Forespurt periode: {requested_start_date or "ukjent"} til {requested_end_date or "ukjent"}. '
                 f'Rader funnet for ticker: {len(ticker_rows)}. Rader funnet for benchmark: {len(benchmark_rows)}.'
             ),
+            first_close=float(limited_rows[0].close),
+            last_close=float(limited_rows[-1].close),
+            period_return_pct=_chart_return_pct(limited_rows),
+            **chart_metadata,
         )
 
     if benchmark_ticker:
@@ -677,6 +708,10 @@ def build_selected_ticker_chart_detail(
         sma50_non_null_count=sum(1 for row in filtered_rows if sma_lookup.get(row.price_date.isoformat(), (None, None))[0] is not None),
         sma200_non_null_count=sum(1 for row in filtered_rows if sma_lookup.get(row.price_date.isoformat(), (None, None))[1] is not None),
         warning=None,
+        first_close=float(filtered_rows[0].close) if filtered_rows else None,
+        last_close=float(filtered_rows[-1].close) if filtered_rows else None,
+        period_return_pct=_chart_return_pct(filtered_rows),
+        **chart_metadata,
     )
 
 
@@ -819,10 +854,20 @@ def _build_price_points(
     return tuple(points)
 
 
-def _resolve_chart_period_rows(label: str, *, fallback: int) -> int | None:
-    if label in CHART_PERIOD_ROW_COUNTS:
-        return CHART_PERIOD_ROW_COUNTS[label]
-    return fallback
+def _chart_calendar_start(label: str, as_of_date: date) -> date | None:
+    months = CHART_PERIOD_CALENDAR_MONTHS[label]
+    if months is None:
+        return None
+    month_index = as_of_date.year * 12 + as_of_date.month - 1 - months
+    year, zero_based_month = divmod(month_index, 12)
+    month = zero_based_month + 1
+    return date(year, month, min(as_of_date.day, monthrange(year, month)[1]))
+
+
+def _chart_return_pct(rows) -> float | None:
+    if not rows or not float(rows[0].close):
+        return None
+    return (float(rows[-1].close) / float(rows[0].close) - 1.0) * 100.0
 
 
 def _build_sma_lookup(rows) -> dict[str, tuple[float | None, float | None]]:

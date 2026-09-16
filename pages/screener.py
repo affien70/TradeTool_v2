@@ -7,7 +7,7 @@ import streamlit as st
 
 from tradetool.config.runtime_settings import inspect_app_database
 from tradetool.ui.screener import (
-    CHART_PERIOD_ROW_COUNTS,
+    CHART_PERIOD_CALENDAR_MONTHS,
     DEFAULT_CHART_PERIOD_LABEL,
     build_incumbent_screener_ui_result,
     build_price_chart_spec,
@@ -223,7 +223,7 @@ def render() -> None:
     detail_columns[3].metric('Pris', f"{float(selected_row.get('close')):.2f}" if selected_row.get('close') is not None else '')
     st.markdown(incumbent_candidate_explanation(selected_row))
     st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
-    chart_period_options = list(CHART_PERIOD_ROW_COUNTS)
+    chart_period_options = list(CHART_PERIOD_CALENDAR_MONTHS)
     chart_period_label = st.selectbox(
         'Grafperiode',
         options=chart_period_options,
@@ -251,6 +251,13 @@ def render() -> None:
                 {'felt': 'selected_ticker_price_chart', 'verdi': chart_detail.ticker},
                 {'felt': 'selected_ticker_benchmark_chart', 'verdi': chart_detail.ticker},
                 {'felt': 'chart_period', 'verdi': chart_detail.chart_period_label},
+                {'felt': 'chart_calendar_start_date', 'verdi': chart_detail.calendar_start_date},
+                {'felt': 'chart_first_visible_date', 'verdi': chart_detail.requested_start_date},
+                {'felt': 'chart_last_visible_date', 'verdi': chart_detail.requested_end_date},
+                {'felt': 'chart_first_close', 'verdi': chart_detail.first_close},
+                {'felt': 'chart_last_close', 'verdi': chart_detail.last_close},
+                {'felt': 'chart_period_return_pct', 'verdi': chart_detail.period_return_pct},
+                {'felt': 'chart_close_source', 'verdi': chart_detail.close_source},
                 {'felt': 'chart_raw_rows_loaded', 'verdi': chart_detail.ticker_rows_found},
                 {'felt': 'chart_visible_rows', 'verdi': chart_detail.visible_rows},
                 {'felt': 'chart_row_count', 'verdi': len(chart_detail.price_points)},
