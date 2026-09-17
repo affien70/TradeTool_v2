@@ -6,6 +6,7 @@ from pathlib import Path
 import streamlit as st
 
 from tradetool.config.runtime_settings import inspect_app_database
+from tradetool.ui.company_names import company_name_for, load_company_names
 from tradetool.ui.screener import (
     CHART_PERIOD_CALENDAR_MONTHS,
     DEFAULT_CHART_PERIOD_LABEL,
@@ -34,11 +35,6 @@ SCREENING_DATE_HELP = 'Screeningdato brukes for historisk testing. I vanlig bruk
 
 def _show_database_status() -> object:
     status = inspect_app_database()
-    status_columns = st.columns(4)
-    status_columns[0].metric('Database', status.configured_path_text)
-    status_columns[1].metric('Finnes', 'ja' if status.exists else 'nei')
-    status_columns[2].metric('Lesbar', 'ja' if status.readable else 'nei')
-    status_columns[3].metric('price_history_v2', 'ja' if status.price_history_v2_table_exists else 'nei')
     if not status.exists:
         st.warning(MISSING_DB_MESSAGE)
     elif not status.readable:
@@ -46,7 +42,7 @@ def _show_database_status() -> object:
     elif not status.price_history_v2_table_exists:
         st.warning('Lokal app-database mangler tabellen price_history_v2.')
     else:
-        st.caption(f'price_history_v2-rader: {status.row_count}. Siste prisdato: {status.latest_price_date}.')
+        st.caption(f'Siste markedsdato: {status.latest_price_date or "Ukjent"}')
     return status
 
 
@@ -124,9 +120,10 @@ def _cached_selected_ticker_chart_detail(
 
 def render() -> None:
     st.title('Aksje-screener')
-    st.caption('V1-lignende flyt med V2 incumbent screener-kjerne. Risikotagger er informasjon, ikke filtre.')
+    st.caption('Rangert etter relativ styrke siste 6 måneder. Risikoflagg påvirker ikke rekkefølgen.')
     db_status = _show_database_status()
     default_screening_date = _default_screening_date(db_status)
+    company_names = load_company_names()
 
     control_left, control_right = st.columns([1.6, 1.0])
     with control_left:
@@ -144,7 +141,7 @@ def render() -> None:
             help=SCREENING_DATE_HELP,
         )
         st.caption(SCREENING_DATE_HELP)
-    st.caption(f'Benchmark: {benchmark_ticker} | Motor: incumbent_naive_rs_6m_top_10_v0 | Close: adjusted_close')
+    st.caption(f'Benchmark: {benchmark_ticker}')
 
     if run_clicked:
         if not _database_ready(db_status):
@@ -172,18 +169,23 @@ def render() -> None:
         st.info('Velg univers og klikk Kjør screener for å vise kandidater.')
         return
 
-    summary_columns = st.columns(5)
-    for column, row in zip(summary_columns, incumbent_screener_summary_rows(incumbent_result), strict=True):
-        column.metric(str(row['felt']), row['verdi'])
-    st.caption(f'Bruker markedsdata til og med: {incumbent_result.effective_feature_date or incumbent_result.as_of_date}')
+    st.caption(
+        f'{incumbent_result.universe_id} | {incumbent_result.eligible_count} rangert | '
+        f'Top {incumbent_result.selected_count} | Markedsdata til og med: '
+        f'{incumbent_result.effective_feature_date or incumbent_result.as_of_date}'
+    )
 
     table_rows = incumbent_screener_table_rows(incumbent_result)
     st.subheader('Rangerte kandidater')
-    st.caption('Klikk på en rad for å analysere kandidaten under med samme grafoppsett som i gamle Screener. Risikotagger er informasjon, ikke filtre.')
     event = st.dataframe(
         table_rows,
         use_container_width=True,
         hide_index=True,
+        height=390,
+        column_config={
+            'Selskap': st.column_config.TextColumn('Selskap', width='medium'),
+            'Risiko': st.column_config.TextColumn('Risiko', width='small'),
+        },
         on_select='rerun',
         selection_mode='single-row',
         key='incumbent_screener_results_table',
@@ -206,23 +208,29 @@ def render() -> None:
     ticker_options = incumbent_screener_ticker_options(table_rows)
     if ticker_options:
         selected_index = ticker_options.index(selected_ticker) if selected_ticker in ticker_options else 0
-        selected_ticker = st.selectbox('Valgt kandidat', options=ticker_options, index=selected_index, key='screener_selected_ticker_picker')
+        selected_ticker = st.selectbox(
+            'Valgt kandidat', options=ticker_options, index=selected_index,
+            format_func=lambda ticker: f'{company_name_for(ticker, company_names)} ({ticker})',
+            key='screener_selected_ticker_picker',
+        )
         st.session_state['screener_chart_ticker'] = selected_ticker
 
-    st.subheader('Valgt kandidat')
     if not selected_ticker:
         st.warning('Ingen rader tilgjengelig med gjeldende filter.')
         return
 
     selected_row = selected_incumbent_candidate(incumbent_result, ticker=selected_ticker)
     detail_ticker = str(selected_row.get('ticker') or selected_ticker).strip().upper()
+    st.subheader(company_name_for(detail_ticker, company_names))
+    st.caption(detail_ticker)
     detail_columns = st.columns(4)
-    detail_columns[0].metric('Ticker', selected_row.get('ticker'))
-    detail_columns[1].metric('Incumbent-rang', selected_row.get('incumbent_rank'))
+    detail_columns[0].metric('Rang', selected_row.get('incumbent_rank'))
+    detail_columns[1].metric('RS 6m', f"{float(selected_row.get('relative_strength_6m')):.1%}" if selected_row.get('relative_strength_6m') is not None else '')
     detail_columns[2].metric('Risiko', selected_row.get('risk_level'))
     detail_columns[3].metric('Pris', f"{float(selected_row.get('close')):.2f}" if selected_row.get('close') is not None else '')
-    st.markdown(incumbent_candidate_explanation(selected_row))
-    st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
+    st.caption(f'Risikomerknad, ikke del av rangeringen: {incumbent_candidate_explanation(selected_row)}')
+    with st.expander('Nøkkeltall og risikoflagg', expanded=False):
+        st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
     chart_period_options = list(CHART_PERIOD_CALENDAR_MONTHS)
     chart_period_label = st.selectbox(
         'Grafperiode',
@@ -239,13 +247,16 @@ def render() -> None:
         as_of_date_text=str(incumbent_result.as_of_date),
         chart_period_label=str(chart_period_label),
     )
-    st.subheader('Prischart')
-    _render_price_chart(chart_detail)
-    st.subheader('Normalisert benchmark-sammenligning og relativ styrke')
-    st.caption('Indeksert mot siste handelsdag før/ved periodestart for å ligne Nordnet-avkastning.')
-    _render_relative_strength_chart(chart_detail)
+    price_tab, relative_tab = st.tabs(['Kurs', 'Benchmark og relativ styrke'])
+    with price_tab:
+        _render_price_chart(chart_detail)
+    with relative_tab:
+        st.caption('Indeksert mot siste handelsdag før/ved periodestart.')
+        _render_relative_strength_chart(chart_detail)
 
     with st.expander('Tekniske detaljer', expanded=False):
+        st.caption(f'Database: {db_status.configured_path_text} | price_history_v2-rader: {db_status.row_count}')
+        st.dataframe(incumbent_screener_summary_rows(incumbent_result), use_container_width=True, hide_index=True)
         st.dataframe(
             [
                 {'felt': 'selected_ticker_detail', 'verdi': detail_ticker},

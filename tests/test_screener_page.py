@@ -180,7 +180,7 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("date_input(\n            'Screeningdato'", source)
         self.assertIn('Screeningdato brukes for historisk testing. I vanlig bruk velges siste tilgjengelige prisdato automatisk.', source)
         self.assertIn("date.fromisoformat(str(latest_price_date))", source)
-        self.assertIn('Bruker markedsdata til og med:', source)
+        self.assertIn('Markedsdata til og med:', source)
 
     def test_screener_page_keeps_debug_details_out_of_main_screen(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
@@ -188,7 +188,7 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("st.expander('Tekniske detaljer'", source)
         self.assertIn('incumbent_screener_table_rows', source)
         self.assertIn('build_selected_ticker_chart_detail', source)
-        self.assertIn("st.selectbox('Valgt kandidat'", source)
+        self.assertIn("'Valgt kandidat', options=ticker_options", source)
 
     def test_screener_page_uses_one_selected_ticker_for_detail_and_charts(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')
@@ -239,4 +239,4 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("'chart_first_rs_index_value'", expander_body)
         self.assertIn("'chart_sma50_non_null_count'", expander_body)
         self.assertIn("'chart_sma200_non_null_count'", expander_body)
-        self.assertIn('Indeksert mot siste handelsdag før/ved periodestart for å ligne Nordnet-avkastning.', source)
+        self.assertIn('Indeksert mot siste handelsdag før/ved periodestart.', source)

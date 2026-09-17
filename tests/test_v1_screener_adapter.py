@@ -51,7 +51,9 @@ class V1ScreenerAdapterTests(unittest.TestCase):
         self.assertEqual(tuple(rows[0]), V1_SCREENER_TABLE_COLUMNS)
         self.assertEqual([row['Ticker'] for row in rows], ['BBB.OL', 'AAA.OL'])
         self.assertEqual(rows[0]['RS 6m'], '42.0%')
-        self.assertEqual(rows[0]['Risikotagger'], 'deep_drawdown, high_volatility')
+        self.assertEqual(rows[0]['Selskap'], 'BBB.OL')
+        self.assertEqual([row['Risiko'] for row in rows], ['HIGH', 'LOW'])
+        self.assertNotIn('Risikotagger', rows[0])
         self.assertNotIn('Forklaring', rows[0])
 
     def test_selected_ticker_matches_v1_table_flow(self) -> None:
@@ -78,6 +80,7 @@ class V1ScreenerAdapterTests(unittest.TestCase):
 
         self.assertIs(selected, row)
         self.assertIn({'felt': 'Ticker', 'verdi': 'BBB.OL'}, detail)
+        self.assertIn({'felt': 'Risikotagger', 'verdi': 'deep_drawdown, high_volatility'}, detail)
         self.assertEqual(v1_candidate_explanation(selected), 'Sterk RS, men høy risiko.')
 
 

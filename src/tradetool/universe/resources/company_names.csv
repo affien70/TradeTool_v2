@@ -1,0 +1,796 @@
+ticker,name
+2020.OL,2020 BULKERS
+5PG.OL,5TH PLANET GAMES
+A,Agilent Technologies
+AAPL,Apple Inc.
+AASB.OL,AASEN SPAREBANK
+ABBV,AbbVie
+ABG.OL,ABG SUNDAL COLLIER HOLDING
+ABL.OL,ABL GROUP ASA
+ABNB,Airbnb
+ABS.OL,ARCTIC BIOSCIENCE AS
+ABT,Abbott Laboratories
+ABTEC.OL,AQUA BIO TECHNOLOGY
+ACED.OL,ACE DIGITAL AS
+ACGL,Arch Capital Group
+ACN,Accenture
+ACR.OL,AXACTOR ASA
+ADBE,Adobe Inc.
+ADI,Analog Devices
+ADM,Archer Daniels Midland
+ADP,Automatic Data Processing
+ADS.OL,ADS MARITIME HOLDING PLC
+ADSK,Autodesk
+AEE,Ameren
+AEP,American Electric Power
+AES,AES Corporation
+AFG.OL,AF GRUPPEN
+AFISH.OL,ARCTIC FISH HOLDING AS
+AFK.OL,Arendals Fossekompani ASA
+AFL,Aflac
+AGLX.OL,AGILYX ASA
+AIG,American International Group
+AIX.OL,AYFIE INTERNATIONAL AS
+AIZ,Assurant
+AJG,Arthur J. Gallagher & Co.
+AKAM,Akamai Technologies
+AKAST.OL,AKASTOR
+AKBM.OL,AKER BIOMARINE ASA
+AKER.OL,AKER
+AKOBO.OL,AKOBO MINERALS AB (PUB)
+AKRBP.OL,AKER BP
+AKSO.OL,AKER SOLUTIONS
+AKVA.OL,AKVA Group ASA
+ALB,Albemarle Corporation
+ALGN,Align Technology
+ALL,Allstate
+ALLE,Allegion
+ALNG.OL,AWILCO LNG
+AMAT,Applied Materials
+AMCR,Amcor
+AMD,Advanced Micro Devices
+AME,Ametek
+AMGN,Amgen
+AMP,Ameriprise Financial
+AMT,American Tower
+AMZN,Amazon
+ANDF.OL,ANDFJORD SALMON GROUP AS
+ANET,Arista Networks
+AON,Aon plc
+AOS,A. O. Smith
+APA,APA Corporation
+APD,Air Products
+APH,Amphenol
+APO,Apollo Global Management
+APP,AppLovin
+APR.OL,APPEAR ASA
+APTV,Aptiv
+ARCH.OL,ARCHER
+ARE,Alexandria Real Estate Equities
+ARES,Ares Management
+ARR.OL,ARRIBATEC GROUP ASA
+ASA.OL,ATLANTIC SAPPHIRE
+ATEA.OL,ATEA
+ATO,Atmos Energy
+AURG.OL,AURSKOG SPAREBANK
+AUSS.OL,AUSTEVOLL SEAFOOD
+AUTO.OL,AUTOSTORE HOLDINGS LTD.
+AVB,AvalonBay Communities
+AVGO,Broadcom
+AVY,Avery Dennison
+AWK,American Water Works
+AXON,Axon Enterprise
+AXP,American Express
+AZO,AutoZone
+AZT.OL,ARCTICZYMES TECHNOLOGIES
+B2I.OL,B2 Impact ASA
+BA,Boeing
+BAC,Bank of America
+BAKKA.OL,BAKKAFROST
+BALL,Ball Corporation
+BALT.OL,BALTIC SEA PROPERTIES
+BARRA.OL,BARRAMUNDI GROUP LTD.
+BAX,Baxter International
+BBY,Best Buy
+BCS.OL,BERGEN CARBON SOLUTIONS AS
+BDX,Becton Dickinson
+BEN,Franklin Resources
+BEWI.OL,BEWI
+BF.B,Brown–Forman
+BG,Bunge Global
+BIEN.OL,BIEN SPAREBANK ASA
+BIIB,Biogen
+BINT.OL,BEWI INVEST ASA
+BKNG,Booking Holdings
+BKR,Baker Hughes
+BLDR,Builders FirstSource
+BLK,BlackRock
+BMA.OL,BYGGMA
+BMY,Bristol Myers Squibb
+BNOR.OL,BLUENORD ASA
+BNY,BNY Mellon
+BONHR.OL,BONHEUR
+BOR.OL,BORGESTAD
+BORR.OL,BORR DRILLING LIMITED
+BOUV.OL,BOUVET
+BR,Broadridge Financial Solutions
+BRG.OL,BORREGAARD
+BRK.B,Berkshire Hathaway
+BRO,Brown & Brown
+BRUT.OL,BRUTON LIMITED
+BSP.OL,BLACK SEA PROPERTY
+BSX,Boston Scientific
+BWE.OL,BW ENERGY LIMITED
+BWLPG.OL,BW LPG
+BWO.OL,BW OFFSHORE LIMITED
+BX,Blackstone Inc.
+BXP,"BXP, Inc."
+C,Citigroup
+CADLR.OL,CADELER A/S
+CAG,Conagra Brands
+CAH,Cardinal Health
+CAMBI.OL,CAMBI ASA
+CAPSL.OL,CAPSOL TECHNOLOGIES ASA
+CAPT.OL,CAPITAL TANKERS CORP.
+CARR,Carrier Global
+CASY,Casey's
+CAT,Caterpillar Inc.
+CAVEN.OL,CAVENDISH HYDROGEN ASA
+CB,Chubb Limited
+CBOE,Cboe Global Markets
+CBRE,CBRE Group
+CCI,Crown Castle
+CCL,Carnival Corporation
+CDNS,Cadence Design Systems
+CDW,CDW Corporation
+CEG,Constellation Energy
+CF,CF Industries
+CFG,Citizens Financial Group
+CHD,Church & Dwight
+CHRW,C.H. Robinson
+CHTR,Charter Communications
+CI,Cigna
+CIEN,Ciena
+CINF,Cincinnati Financial
+CL,Colgate-Palmolive
+CLOUD.OL,CLOUDBERRY CLEAN ENERGY ASA
+CLX,Clorox
+CMBTO.OL,CMB.TECH NV
+CMCSA,Comcast
+CME,CME Group
+CMG,Chipotle Mexican Grill
+CMI,Cummins
+CMS,CMS Energy
+CNC,Centene Corporation
+CNP,CenterPoint Energy
+CODE.OL,CODELAB CAPITAL AS
+COF,Capital One
+COHR,Coherent Corp.
+COIN,Coinbase
+CONTX.OL,CONTEXTVISION
+COO,Cooper Companies (The)
+COP,ConocoPhillips
+COR,Cencora
+COSH.OL,CONSTELLATION OIL SERVICES HOLDING S.A.
+COST,Costco
+CPAY,Corpay
+CPB,Campbell's Company (The)
+CPRT,Copart
+CPT,Camden Property Trust
+CRH,CRH plc
+CRL,Charles River Laboratories
+CRM,Salesforce
+CRNA.OL,CIRCIO HOLDING ASA
+CRWD,CrowdStrike
+CSCO,Cisco
+CSGP,CoStar Group
+CSX,CSX Corporation
+CTAS,Cintas
+CTSH,Cognizant
+CTVA,Corteva
+CVNA,Carvana
+CVS,CVS Health
+CVX,Chevron Corporation
+CYVIZ.OL,CYVIZ AS
+D,Dominion Energy
+DAL,Delta Air Lines
+DASH,DoorDash
+DD,DuPont
+DDOG,Datadog
+DDRIL.OL,DOLPHIN DRILLING AS
+DE,Deere & Company
+DECK,Deckers Brands
+DELIA.OL,DELLIA GROUP
+DELL,Dell Technologies
+DFENS.OL,FJORD DEFENCE GROUP ASA
+DG,Dollar General
+DGX,Quest Diagnostics
+DHI,D. R. Horton
+DHR,Danaher Corporation
+DIS,Walt Disney Company (The)
+DLR,Digital Realty
+DLTR,Dollar Tree
+DNB.OL,DNB BANK ASA
+DNO.OL,DNO
+DOC,Healthpeak Properties
+DOFG.OL,DOF GROUP ASA
+DOV,Dover Corporation
+DOW,Dow Inc.
+DPZ,Domino's
+DRI,Darden Restaurants
+DSRT.OL,DESERT CONTROL AS
+DTE,DTE Energy
+DUK,Duke Energy
+DVA,DaVita
+DVD.OL,DEEP VALUE DRILLER AS
+DVN,Devon Energy
+DXCM,Dexcom
+EA,Electronic Arts
+EAM.OL,EAM SOLAR AS
+EBAY,eBay Inc.
+ECL,Ecolab
+ED,Consolidated Edison
+EFX,Equifax
+EG,Everest Group
+EIOF.OL,EIDESVIK OFFSHORE
+EIX,Edison International
+EL,Estée Lauder Companies (The)
+ELABS.OL,ELLIPTIC LABORATORIES ASA
+ELIMP.OL,ELEKTROIMPORTØREN AS
+ELK.OL,ELKEM
+ELMRA.OL,ELMERA GROUP ASA
+ELO.OL,ELOPAK ASA
+ELV,Elevance Health
+EME,Emcor
+EMGS.OL,ELECTROMAGNETIC GEOSERVICES
+EMR,Emerson Electric
+ENDUR.OL,ENDÚR
+ENERG.OL,ENERGEIA AS
+ENH.OL,SED ENERGY HOLDINGS PLC
+ENSU.OL,ENSURGE MICROPOWER ASA
+ENTRA.OL,ENTRA
+ENVIP.OL,ENVIPCO HOLDING N.V.
+EOG,EOG Resources
+EPAM,EPAM Systems
+EPR.OL,EUROPRIS
+EQIX,Equinix
+EQNR.OL,EQUINOR
+EQR,Equity Residential
+EQT,EQT Corporation
+EQVA.OL,EQVA ASA
+ERIE,Erie Indemnity
+ES,Eversource Energy
+ESS,Essex Property Trust
+ETN,Eaton Corporation
+ETR,Entergy
+EVRG,Evergy
+EW,Edwards Lifesciences
+EXC,Exelon
+EXE,Expand Energy
+EXPD,Expeditors International
+EXPE,Expedia Group
+EXR,Extra Space Storage
+EXTX.OL,EXACT THERAPEUTICS
+F,Ford Motor Company
+FANG,Diamondback Energy
+FAST,Fastenal
+FCX,Freeport-McMoRan
+FDS,FactSet
+FDX,FedEx
+FE,FirstEnergy
+FFIV,"F5, Inc."
+FFSB.OL,FLEKKEFJORD SPAREBANK
+FICO,Fair Isaac
+FIS,Fidelity National Information Services
+FISV,Fiserv
+FITB,Fifth Third Bancorp
+FIX,Comfort Systems USA
+FOX,Fox Corporation (Class B)
+FOXA,Fox Corporation (Class A)
+FRO.OL,FRONTLINE PLC
+FRT,Federal Realty Investment Trust
+FSLR,First Solar
+FTNT,Fortinet
+FTV,Fortive
+GD,General Dynamics
+GDDY,GoDaddy
+GE,GE Aerospace
+GEAN.OL,Genetic Analysis AS
+GEHC,GE HealthCare
+GEM.OL,GREEN MINERALS AS
+GEN,Gen Digital
+GENO.OL,GENERAL OCEANS ASA
+GENT.OL,GENTIAN DIAGNOSTICS ASA
+GEOS.OL,GOLDEN ENERGY OFFSHORE SERVICES ASA
+GEV,GE Vernova
+GIGA.OL,GIGANTE SALMON AS
+GILD,Gilead Sciences
+GIS,General Mills
+GJF.OL,GJENSIDIGE FORSIKRING
+GKP.OL,GULF KEYSTONE PETROLEUM LTD
+GL,Globe Life
+GLW,Corning Inc.
+GM,General Motors
+GNRC,Generac
+GOD.OL,GOODTECH
+GOOG,Alphabet Inc. (Class C)
+GOOGL,Alphabet Inc. (Class A)
+GPC,Genuine Parts Company
+GPN,Global Payments
+GRMN,Garmin
+GRONG.OL,GRONG SPAREBANK
+GS,Goldman Sachs
+GSF.OL,GRIEG SEAFOOD
+GWW,W. W. Grainger
+GYL.OL,GYLDENDAL
+HAFNI.OL,HAFNIA LIMITED
+HAL,Halliburton
+HAS,Hasbro
+HAUTO.OL,HOEGH AUTOLINERS ASA
+HAV.OL,HAV GROUP ASA
+HAVI.OL,HAVILA SHIPPING
+HBAN,Huntington Bancshares
+HBC.OL,HOFSETH BIOCARE
+HCA,HCA Healthcare
+HD,Home Depot (The)
+HDLY.OL,HUDDLY AS
+HELG.OL,SPAREBANK 1 HELGELAND
+HERMA.OL,HERMANA HOLDING ASA
+HEX.OL,HEXAGON COMPOSITES
+HGSB.OL,HAUGESUND SPAREBANK
+HIG,Hartford (The)
+HII,Huntington Ingalls Industries
+HKY.OL,HAVILA KYSTRUTEN AS
+HLT,Hilton Worldwide
+HON,Honeywell
+HOOD,Robinhood Markets
+HPE,Hewlett Packard Enterprise
+HPQ,HP Inc.
+HPUR.OL,HEXAGON PURUS ASA
+HRL,Hormel Foods
+HSHP.OL,HIMALAYA SHIPPING LTD
+HSIC,Henry Schein
+HSPG.OL,HØLAND OG SETSKOG SPAREBANK
+HST,Host Hotels & Resorts
+HSY,Hershey Company (The)
+HUBB,Hubbell Incorporated
+HUDL.OL,HUDDLESTOCK FINTECH
+HUM,Humana
+HUNT.OL,HUNTER GROUP
+HWM,Howmet Aerospace
+HYN.OL,HYNION AS
+HYPRO.OL,HYDROGENPRO ASA
+IBKR,Interactive Brokers
+IBM,IBM
+ICE,Intercontinental Exchange
+IDEX.OL,IDEX BIOMETRICS
+IDXX,Idexx Laboratories
+IEX,IDEX Corporation
+IFF,International Flavors & Fragrances
+INCY,Incyte
+INDCT.OL,INDUCT
+INIFY.OL,INIFY LABORATORIES AB
+ININ.OL,ININ GROUP AS
+INSTA.OL,INSTABANK
+INTC,Intel
+INTU,Intuit
+INVH,Invitation Homes
+IOX.OL,INTEROIL EXPLORATION AND PRODUCTION
+IP,International Paper
+IQV,IQVIA
+IR,Ingersoll Rand
+IRM,Iron Mountain
+ISLAX.OL,ICELANDIC SALMON
+ISRG,Intuitive Surgical
+IT,Gartner
+ITERA.OL,ITERA
+ITW,Illinois Tool Works
+IVZ,Invesco
+IWS.OL,INTEGRATED WIND SOLUTIONS ASA
+J,Jacobs Solutions
+JACK.OL,JACKTEL AS
+JAREN.OL,JÆREN SPAREBANK
+JBHT,J.B. Hunt
+JBL,Jabil
+JCI,Johnson Controls
+JIN.OL,JINHUI SHIPPING AND TRANSPORTATION
+JKHY,Jack Henry & Associates
+JNJ,Johnson & Johnson
+JPM,JPMorgan Chase
+KCC.OL,KLAVENESS COMBINATION CARRIERS
+KDP,Keurig Dr Pepper
+KEY,KeyCorp
+KEYS,Keysight Technologies
+KHC,Kraft Heinz
+KID.OL,KID
+KIM,Kimco Realty
+KING.OL,THE KINGFISH COMPANY
+KIT.OL,Kitron ASA
+KKR,KKR & Co.
+KLAC,KLA Corporation
+KLDVK.OL,KALDVIK AS
+KMAR.OL,KONGSBERG MARITIME ASA
+KMB,Kimberly-Clark
+KMI,Kinder Morgan
+KO,Coca-Cola Company (The)
+KOA.OL,KONGSBERG AUTOMOTIVE
+KOG.OL,KONGSBERG GRUPPEN
+KOMPL.OL,KOMPLETT ASA
+KR,Kroger
+KRAB.OL,KRAFT BANK ASA
+KVUE,Kenvue
+L,Loews Corporation
+LDOS,Leidos
+LEN,Lennar
+LH,Labcorp
+LHX,L3Harris
+LIFE.OL,LIFECARE ASA
+LII,Lennox International
+LIN,Linde plc
+LINK.OL,LINK MOBILITY GROUP HOLDING
+LITE,Lumentum
+LLY,Lilly (Eli)
+LMT,Lockheed Martin
+LNT,Alliant Energy
+LOKO.OL,LOKOTECH GROUP AS
+LOW,Lowe's
+LRCX,Lam Research
+LSG.OL,LERØY SEAFOOD GROUP
+LULU,Lululemon Athletica
+LUMI.OL,LUMI EDUCATION GROUP AS
+LUV,Southwest Airlines
+LVS,Las Vegas Sands
+LYB,LyondellBasell
+LYTIX.OL,LYTIX BIOPHARMA ASA
+LYV,Live Nation Entertainment
+MA,Mastercard
+MAA,Mid-America Apartment Communities
+MAR,Marriott International
+MAS,Masco
+MAS.OL,MÅSØVAL AS
+MCD,McDonald's
+MCHP,Microchip Technology
+MCK,McKesson Corporation
+MCO,Moody's Corporation
+MDLZ,Mondelez International
+MDT,Medtronic
+MEDI.OL,MEDISTIM
+MELG.OL,MELHUS SPAREBANK
+MET,MetLife
+META,Meta Platforms
+MGM,MGM Resorts
+MGN.OL,MAGNORA
+MING.OL,SPAREBANK 1 SMN
+MKC,McCormick & Company
+MLM,Martin Marietta Materials
+MMM,3M
+MNST,Monster Beverage
+MO,Altria
+MORG.OL,SPAREBANKEN MØRE
+MORLD.OL,MORELD ASA
+MOS,Mosaic Company (The)
+MOWI.OL,MOWI
+MPC,Marathon Petroleum
+MPCC.OL,MPC CONTAINER SHIPS
+MPCES.OL,MPC ENERGY SOLUTIONS N.V.
+MPWR,Monolithic Power Systems
+MRK,Merck & Co.
+MRNA,Moderna
+MRSH,Marsh McLennan
+MS,Morgan Stanley
+MSCI,MSCI Inc.
+MSFT,Microsoft
+MSI,Motorola Solutions
+MTB,M&T Bank
+MTD,Mettler Toledo
+MU,Micron Technology
+MULTI.OL,MULTICONSULT
+MVE.OL,MATVAREEXPRESSEN AS
+MVW.OL,M VEST WATER AS
+NAPA.OL,NAPATECH
+NAS.OL,NORWEGIAN AIR SHUTTLE
+NAVA.OL,NAVAMEDIC
+NBX.OL,NORWEGIAN BLOCK EXCHANGE AS
+NCLH,Norwegian Cruise Line Holdings
+NCOD.OL,NORCOD
+NDAQ,"Nasdaq, Inc."
+NDSN,Nordson Corporation
+NEE,NextEra Energy
+NEL.OL,NEL
+NEM,Newmont
+NEXT.OL,NEXT BIOMETRICS GROUP
+NFLX,Netflix
+NHY.OL,Norsk Hydro ASA
+NI,NiSource
+NISB.OL,NIDAROS SPAREBANK
+NKE,"Nike, Inc."
+NKR.OL,NEKKAR
+NOAP.OL,NORDIC AQUA PARTNERS AS
+NOC,Northrop Grumman
+NOD.OL,NORDIC SEMICONDUCTOR
+NOFIN.OL,NORDIC FINANCIALS ASA
+NOHAL.OL,NORDIC HALIBUT AS
+NOL.OL,NORTHERN OCEAN LTD.
+NOM.OL,NORDIC MINING
+NONG.OL,SPAREBANK 1 NORD-NORGE
+NORAM.OL,NORAM DRILLING AS
+NORBT.OL,NORBIT
+NORCO.OL,NORCONSULT ASA
+NORDH.OL,NORDHEALTH AS A-AKSJER
+NORSE.OL,NORSE ATLANTIC ASA
+NORTH.OL,NORTH ENERGY
+NOSN.OL,NOS NOVA AS
+NOW,ServiceNow
+NRC.OL,NRC GROUP
+NRG,NRG Energy
+NSC,Norfolk Southern
+NSKOG.OL,NORSKE SKOG
+NTAP,NetApp
+NTG.OL,NORDIC TECHNOLOGY GROUP AS
+NTI.OL,NORSK TITANIUM AS
+NTRS,Northern Trust
+NUE,Nucor
+NVDA,Nvidia
+NVR,"NVR, Inc."
+NWS,News Corp (Class B)
+NWSA,News Corp (Class A)
+NXPI,NXP Semiconductors
+NYKD.OL,NYKODE THERAPEUTICS ASA
+O,Realty Income
+OBSRV.OL,OBSERVE MEDICAL
+OCEAN.OL,OCEAN GEOLOOP AS
+ODF.OL,ODFJELL SER. A
+ODFB.OL,ODFJELL SER. B
+ODFL,Old Dominion
+ODL.OL,ODFJELL DRILLING
+OET.OL,OKEANIS ECO TANKERS
+OKE,Oneok
+OKEA.OL,OKEA
+OMC,Omnicom Group
+OMDA.OL,OMDA AS
+ON,ON Semiconductor
+ONCIN.OL,ONCOINVENT ASA
+ORCL,Oracle Corporation
+ORK.OL,ORKLA
+ORLY,O’Reilly Automotive
+OSUN.OL,OCEAN SUN
+OTEC.OL,OTELLO CORPORATION
+OTIS,Otis Worldwide
+OTL.OL,ODFJELL TECHNOLOGY LTD
+OTOVO.OL,OTOVO ASA
+OXY,Occidental Petroleum
+PANW,Palo Alto Networks
+PARB.OL,PARETO BANK
+PAYX,Paychex
+PCAR,Paccar
+PCG,PG&E Corporation
+PEG,Public Service Enterprise Group
+PEN.OL,PANORO ENERGY
+PEP,PepsiCo
+PEXIP.OL,PEXIP HOLDING
+PFE,Pfizer
+PFG,Principal Financial Group
+PG,Procter & Gamble
+PGR,Progressive Corporation
+PH,Parker Hannifin
+PHM,PulteGroup
+PHO.OL,PHOTOCURE
+PKG,Packaging Corporation of America
+PLD,Prologis
+PLGC.OL,PELAGIC CREDIT PLC
+PLSV.OL,PARATUS ENERGY SERVICES LTD.
+PLT.OL,POLIGHT
+PLTR,Palantir Technologies
+PM,Philip Morris International
+PNC,PNC Financial Services
+PNOR.OL,PETRONOR E&P ASA
+PNR,Pentair
+PNW,Pinnacle West Capital
+PODD,Insulet Corporation
+POL.OL,POLARIS MEDIA
+POOL,Pool Corporation
+PPG,PPG Industries
+PPG.OL,PIONEER PROPERTY GROUP
+PPL,PPL Corporation
+PROT.OL,PROTECTOR FORSIKRING
+PROXI.OL,PROXIMAR SEAFOOD AS
+PRS.OL,PROSAFE
+PRU,Prudential Financial
+PRYME.OL,PRYME N.V.
+PSA,Public Storage
+PSE.OL,PETROLIA
+PSKY,Paramount Skydance Corporation
+PSX,Phillips 66
+PTC,PTC Inc.
+PUBLI.OL,PPI PUBLIC PROPERTY INVEST AB (PUBL)
+PWR,Quanta Services
+PYPL,PayPal
+PYRUM.OL,PYRUM INNOVATIONS AG
+Q,Qnity Electronics
+QCOM,Qualcomm
+QEC.OL,QUESTERRE ENERGY CORPORATION
+RCL,Royal Caribbean Group
+REACH.OL,REACH SUBSEA
+RECSI.OL,REC SILICON
+REFL.OL,REFUELS N.V.
+REG,Regency Centers
+REGN,Regeneron Pharmaceuticals
+RF,Regions Financial Corporation
+RING.OL,SPAREBANK 1 RINGERIKE HADELAND
+RIVER.OL,RIVER TECH
+RJF,Raymond James Financial
+RL,Ralph Lauren Corporation
+RMD,ResMed
+ROGS.OL,ROGALAND SPAREBANK
+ROK,Rockwell Automation
+ROL,"Rollins, Inc."
+ROM.OL,ROMREAL
+ROMER.OL,ROMERIKE SPAREBANK
+ROP,Roper Technologies
+ROST,Ross Stores
+RSG,Republic Services
+RTX,RTX Corporation
+RVTY,Revvity
+SAGA.OL,SAGA PURE
+SALM.OL,SALMAR
+SALME.OL,SALMON EVOLUTION ASA
+SATS,EchoStar
+SATS.OL,SATS
+SB1NO.OL,SPAREBANK 1 SØR-NORGE ASA
+SB68.OL,SPAREBANK 68 GRADER NORD
+SBAC,SBA Communications
+SBNOR.OL,SPAREBANKEN NORGE
+SBO.OL,SELVAAG BOLIG
+SBUX,Starbucks
+SCANA.OL,SCANA
+SCATC.OL,SCATEC ASA
+SCHW,Charles Schwab Corporation
+SDSD.OL,S.D. STANDARD ETC PLC
+SEA1.OL,Sea1 Offshore Inc.
+SHW,Sherwin-Williams
+SJM,J.M. Smucker Company (The)
+SKAND.OL,SKANDIA GREENPOWER AS
+SKUE.OL,SKUE SPAREBANK
+SLB,Schlumberger
+SMCI,Supermicro
+SMOP.OL,Smartoptics Group AS
+SNA,Snap-on
+SNDK,Sandisk
+SNI.OL,STOLT-NIELSEN
+SNOR.OL,SPAREBANK 1 NORDMØRE
+SNPS,Synopsys
+SNTIA.OL,SENTIA ASA
+SO,Southern Company
+SOAG.OL,SPAREBANK 1 ØSTFOLD AKERSHUS
+SOFF.OL,SOLSTAD OFFSHORE
+SOFTX.OL,SOFTOX SOLUTIONS
+SOGN.OL,SOGN SPAREBANK
+SOLV,Solventum
+SOMA.OL,SOLSTAD MARITIME ASA
+SPG,Simon Property Group
+SPGI,S&P Global
+SPOG.OL,SPAREBANKEN ØST
+SPOL.OL,SPAREBANK 1 ØSTLANDET
+SRE,Sempra
+STB.OL,STOREBRAND
+STE,Steris
+STECH.OL,SOILTECH ASA
+STLD,Steel Dynamics
+STRO.OL,STRONGPOINT
+STST.OL,STAINLESS TANKERS ASA
+STT,State Street Corporation
+STX,Seagate Technology
+STZ,Constellation Brands
+SUBC.OL,SUBSEA 7
+SW,Smurfit Westrock
+SWK,Stanley Black & Decker
+SWKS,Skyworks Solutions
+SWON.OL,SOFTWAREONE HOLDING
+SYF,Synchrony Financial
+SYK,Stryker Corporation
+SYY,Sysco
+T,AT&T
+TAP,Molson Coors Beverage Company
+TDG,TransDigm Group
+TDY,Teledyne Technologies
+TECH,Bio-Techne
+TECH.OL,TECHSTEP
+TEKNA.OL,TEKNA HOLDING ASA
+TEL,TE Connectivity
+TEL.OL,TELENOR
+TER,Teradyne
+TFC,Truist Financial
+TGS.OL,TGS ASA
+TGT,Target Corporation
+TIETO.OL,Tieto Oyj
+TINDE.OL,TINDE SPAREBANK
+TJX,TJX Companies
+TKO,TKO Group Holdings
+TMO,Thermo Fisher Scientific
+TMUS,T-Mobile US
+TOM.OL,TOMRA SYSTEMS
+TPL,Texas Pacific Land Corporation
+TPR,"Tapestry, Inc."
+TRGP,Targa Resources
+TRMB,Trimble Inc.
+TRMED.OL,THOR MEDICAL ASA
+TROW,T. Rowe Price
+TRSB.OL,TRØNDELAG SPAREBANK
+TRV,Travelers Companies (The)
+TSCO,Tractor Supply
+TSLA,"Tesla, Inc."
+TSN,Tyson Foods
+TT,Trane Technologies
+TTD,Trade Desk (The)
+TTWO,Take-Two Interactive
+TXN,Texas Instruments
+TXT,Textron
+TYL,Tyler Technologies
+UAL,United Airlines Holdings
+UBER,Uber
+UDR,"UDR, Inc."
+UHS,Universal Health Services
+ULTA,Ulta Beauty
+UNH,UnitedHealth Group
+UNP,Union Pacific Corporation
+UPS,United Parcel Service
+URI,United Rentals
+USB,U.S. Bancorp
+V,Visa Inc.
+VAR.OL,VÅR ENERGI ASA
+VDI.OL,Vantage Drilling International Ltd.
+VEEV,Veeva Systems
+VEI.OL,VEIDEKKE
+VEND.OL,VEND MARKETPLACES ASA
+VICI,Vici Properties
+VISTN.OL,VISTIN PHARMA
+VLO,Valero Energy
+VLTO,Veralto
+VMC,Vulcan Materials Company
+VOW.OL,VOW
+VRSK,Verisk Analytics
+VRSN,Verisign
+VRT,Vertiv
+VRTX,Vertex Pharmaceuticals
+VST,Vistra Corp.
+VTR,Ventas
+VTRS,Viatris
+VTURA.OL,VENTURA OFFSHORE HOLDING LTD.
+VVL.OL,VOSS VEKSEL- OG LANDMANDSBANK
+VZ,Verizon
+WAB,Wabtec
+WAT,Waters Corporation
+WAWI.OL,WALLENIUS WILHELMSEN
+WBD,Warner Bros. Discovery
+WDAY,"Workday, Inc."
+WDC,Western Digital
+WEC,WEC Energy Group
+WELL,Welltower
+WEST.OL,WESTERN BULK CHARTERING AS
+WFC,Wells Fargo
+WM,Waste Management
+WMB,Williams Companies
+WMT,Walmart
+WRB,W. R. Berkley Corporation
+WSM,"Williams-Sonoma, Inc."
+WST,West Pharmaceutical Services
+WSTEP.OL,WEBSTEP
+WTW,Willis Towers Watson
+WWI.OL,WILH. WILHELMSEN HOLDING SER. A
+WWIB.OL,WILH. WILHELMSEN HOLDING SER. B
+WY,Weyerhaeuser
+WYNN,Wynn Resorts
+XEL,Xcel Energy
+XOM,ExxonMobil
+XPLRA.OL,XPLORA TECHNOLOGIES
+XYL,Xylem Inc.
+XYZ,"Block, Inc."
+YAR.OL,YARA INTERNATIONAL
+YUM,Yum! Brands
+ZAL.OL,ZALARIS
+ZAP.OL,ZAPTEC ASA
+ZBH,Zimmer Biomet
+ZBRA,Zebra Technologies
+ZENA.OL,ZENITH ENERGY
+ZLNA.OL,ZELLUNA
+ZTS,Zoetis

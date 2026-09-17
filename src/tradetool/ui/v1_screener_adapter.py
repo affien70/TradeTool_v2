@@ -3,16 +3,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import math
 
+from tradetool.ui.company_names import company_name_for
+
 V1_SCREENER_TABLE_COLUMNS = (
     'Rang',
+    'Selskap',
     'Ticker',
     'RS 6m',
-    'RS 3m',
-    '6m %',
-    '3m %',
-    'Siste kurs',
     'Risiko',
-    'Risikotagger',
 )
 
 
@@ -68,6 +66,7 @@ def select_v1_candidate(result, *, ticker: str) -> Mapping[str, object]:
 
 def v1_candidate_detail_rows(row: Mapping[str, object]) -> list[dict[str, object]]:
     return [
+        {'felt': 'Selskap', 'verdi': company_name_for(str(row.get('ticker') or ''))},
         {'felt': 'Ticker', 'verdi': row.get('ticker')},
         {'felt': 'Incumbent-rang', 'verdi': row.get('incumbent_rank')},
         {'felt': 'Siste featuredato', 'verdi': row.get('latest_feature_date')},
@@ -105,14 +104,10 @@ def v1_summary_rows(result) -> list[dict[str, object]]:
 def _display_row(row: Mapping[str, object]) -> dict[str, object]:
     return {
         'Rang': row.get('incumbent_rank'),
+        'Selskap': company_name_for(str(row.get('ticker') or '')),
         'Ticker': row.get('ticker'),
         'RS 6m': _format_percent(row.get('relative_strength_6m')),
-        'RS 3m': _format_percent(row.get('relative_strength_3m')),
-        '6m %': _format_percent(row.get('return_6m')),
-        '3m %': _format_percent(row.get('return_3m')),
-        'Siste kurs': _format_number(row.get('close'), decimals=2),
         'Risiko': row.get('risk_level'),
-        'Risikotagger': _format_tags(row.get('risk_tags')),
     }
 
 

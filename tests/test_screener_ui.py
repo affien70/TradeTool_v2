@@ -665,16 +665,12 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(list(rows[0]), [
             'Rang',
+            'Selskap',
             'Ticker',
             'RS 6m',
-            'RS 3m',
-            '6m %',
-            '3m %',
-            'Siste kurs',
             'Risiko',
-            'Risikotagger',
         ])
-        self.assertIn(rows[0]['Risiko'], {'LOW', 'MEDIUM', 'HIGH'})
+        self.assertTrue(rows[0]['Selskap'])
         self.assertNotIn('Forklaring', rows[0])
         self.assertNotIn('ml_score', rows[0])
         self.assertNotIn('holdings_signal', rows[0])
@@ -682,6 +678,7 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         detail_rows = incumbent_candidate_detail_rows(selected)
         self.assertIn({'felt': 'Ticker', 'verdi': rows[0]['Ticker']}, detail_rows)
         self.assertTrue(any(row['felt'] == 'Risikotagger' for row in detail_rows))
+        self.assertIn(selected['risk_level'], {'LOW', 'MEDIUM', 'HIGH'})
         self.assertIsInstance(incumbent_candidate_explanation(selected), str)
         self.assertEqual(incumbent_screener_ticker_options(rows), [str(row['Ticker']) for row in rows])
         self.assertEqual(resolve_incumbent_selected_ticker(rows, selected_row_indexes=[1]), str(rows[1]['Ticker']))
