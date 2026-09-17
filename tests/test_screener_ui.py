@@ -439,9 +439,19 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
                     self.assertEqual(chart.requested_start_date, first_trading_date)
                     self.assertEqual(chart.requested_end_date, as_of.isoformat())
                     self.assertEqual(chart.close_source, 'adjusted_close')
-                    self.assertAlmostEqual(chart.price_points[0].indexed_close or 0.0, 100.0)
-                    self.assertAlmostEqual(chart.price_points[0].indexed_benchmark or 0.0, 100.0)
-                    self.assertAlmostEqual(chart.price_points[0].relative_strength_line or 0.0, 100.0)
+                    self.assertLessEqual(chart.baseline_date or '', chart.calendar_start_date or '')
+                    self.assertAlmostEqual(
+                        chart.price_points[0].indexed_close or 0.0,
+                        chart.price_points[0].close / (chart.baseline_ticker_close or 1.0) * 100.0,
+                    )
+                    self.assertAlmostEqual(
+                        chart.price_points[0].indexed_benchmark or 0.0,
+                        (chart.price_points[0].benchmark_close or 0.0) / (chart.baseline_benchmark_close or 1.0) * 100.0,
+                    )
+                    self.assertAlmostEqual(
+                        chart.price_points[0].relative_strength_line or 0.0,
+                        (chart.price_points[0].indexed_close or 0.0) / (chart.price_points[0].indexed_benchmark or 1.0) * 100.0,
+                    )
                     last = chart.price_points[-1]
                     self.assertAlmostEqual(
                         last.relative_strength_line or 0.0,
@@ -454,7 +464,12 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             )
             self.assertEqual(one_year.first_close, 100.0)
             self.assertEqual(one_year.last_close, 200.0)
-            self.assertEqual(one_year.period_return_pct, 100.0)
+            self.assertEqual(one_year.baseline_date, '2024-09-13')
+            self.assertEqual(one_year.baseline_ticker_close, 50.0)
+            self.assertEqual(one_year.baseline_benchmark_close, 300.0)
+            self.assertEqual(one_year.price_points[0].indexed_close, 200.0)
+            self.assertEqual(one_year.price_points[-1].indexed_close, 400.0)
+            self.assertEqual(one_year.period_return_pct, 300.0)
             self.assertIsNotNone(one_year.price_points[0].sma200)
             max_chart = build_selected_ticker_chart_detail(
                 db_path=db_path, ticker='TEST.OL', benchmark_ticker='OSEBX.OL',
@@ -463,8 +478,10 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             )
             self.assertIsNone(max_chart.calendar_start_date)
             self.assertEqual(max_chart.requested_start_date, '2020-09-15')
+            self.assertEqual(max_chart.baseline_date, max_chart.requested_start_date)
+            self.assertEqual(max_chart.price_points[0].indexed_close, 100.0)
 
-    def test_v2_chart_normalization_and_rs_math_start_at_100(self) -> None:
+    def test_v2_chart_normalization_and_rs_math_use_period_baseline(self) -> None:
         db_path = Path('/tmp/tradetool_v2_screener_ui_chart_math.sqlite')
         if db_path.exists():
             db_path.unlink()
@@ -479,14 +496,37 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         )
         first = chart.price_points[0]
         last = chart.price_points[-1]
-        self.assertEqual(chart.first_normalized_date, first.price_date)
-        self.assertAlmostEqual(chart.first_indexed_ticker_value or 0.0, 100.0, places=6)
-        self.assertAlmostEqual(chart.first_indexed_benchmark_value or 0.0, 100.0, places=6)
-        self.assertAlmostEqual(chart.first_rs_index_value or 0.0, 100.0, places=6)
-        self.assertAlmostEqual(first.relative_strength_line or 0.0, 100.0, places=6)
+        self.assertEqual(chart.first_normalized_date, chart.baseline_date)
+        self.assertEqual(chart.baseline_date, '2025-03-16')
+        self.assertAlmostEqual(chart.first_indexed_ticker_value or 0.0, first.close / (chart.baseline_ticker_close or 1.0) * 100.0, places=6)
+        self.assertAlmostEqual(chart.first_indexed_benchmark_value or 0.0, (first.benchmark_close or 0.0) / (chart.baseline_benchmark_close or 1.0) * 100.0, places=6)
+        self.assertAlmostEqual(chart.first_rs_index_value or 0.0, (first.indexed_close or 0.0) / (first.indexed_benchmark or 1.0) * 100.0, places=6)
+        self.assertNotAlmostEqual(first.indexed_close or 0.0, 100.0, places=6)
         expected_rs = ((last.indexed_close or 0.0) / (last.indexed_benchmark or 1.0)) * 100.0
         self.assertAlmostEqual(last.relative_strength_line or 0.0, expected_rs, places=6)
         db_path.unlink()
+
+    def test_period_baseline_uses_last_common_date_when_benchmark_skips_a_day(self) -> None:
+        with tempfile.TemporaryDirectory(dir='/tmp') as temp_dir:
+            db_path = Path(temp_dir) / 'missing_benchmark_day.sqlite'
+            _build_fixture_v2_db(db_path)
+            with sqlite3.connect(db_path) as connection:
+                connection.execute(
+                    'DELETE FROM price_history_v2 WHERE ticker = ? AND price_date = ?',
+                    ('OSEBX.OL', '2025-06-16'),
+                )
+            chart = build_selected_ticker_chart_detail(
+                db_path=db_path, ticker='CAMBI.OL', benchmark_ticker='OSEBX.OL',
+                price_table=PRICE_TABLE_V2, data_source='yahoo',
+                max_price_date=date(2025, 9, 17), chart_period_label='3 mnd',
+            )
+            self.assertEqual(chart.calendar_start_date, '2025-06-17')
+            self.assertEqual(chart.requested_start_date, '2025-06-17')
+            self.assertEqual(chart.baseline_date, '2025-06-15')
+            self.assertAlmostEqual(
+                chart.price_points[0].indexed_benchmark or 0.0,
+                (chart.price_points[0].benchmark_close or 0.0) / (chart.baseline_benchmark_close or 1.0) * 100.0,
+            )
 
     def test_v2_chart_specs_use_user_friendly_series_labels(self) -> None:
         db_path = Path('/tmp/tradetool_v2_screener_ui_chart_labels.sqlite')

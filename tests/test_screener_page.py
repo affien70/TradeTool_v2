@@ -223,6 +223,10 @@ class ScreenerPageTests(unittest.TestCase):
         expander_body = source.split("with st.expander('Tekniske detaljer'", 1)[1]
         self.assertIn("'chart_period'", expander_body)
         self.assertIn("'chart_calendar_start_date'", expander_body)
+        self.assertIn("'chart_baseline_date'", expander_body)
+        self.assertIn("'chart_baseline_ticker_close'", expander_body)
+        self.assertIn("'chart_baseline_benchmark_close'", expander_body)
+        self.assertIn("'chart_last_indexed_ticker_value'", expander_body)
         self.assertIn("'chart_first_close'", expander_body)
         self.assertIn("'chart_last_close'", expander_body)
         self.assertIn("'chart_period_return_pct'", expander_body)
@@ -235,3 +239,4 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("'chart_first_rs_index_value'", expander_body)
         self.assertIn("'chart_sma50_non_null_count'", expander_body)
         self.assertIn("'chart_sma200_non_null_count'", expander_body)
+        self.assertIn('Indeksert mot siste handelsdag før/ved periodestart for å ligne Nordnet-avkastning.', source)

@@ -242,6 +242,7 @@ def render() -> None:
     st.subheader('Prischart')
     _render_price_chart(chart_detail)
     st.subheader('Normalisert benchmark-sammenligning og relativ styrke')
+    st.caption('Indeksert mot siste handelsdag før/ved periodestart for å ligne Nordnet-avkastning.')
     _render_relative_strength_chart(chart_detail)
 
     with st.expander('Tekniske detaljer', expanded=False):
@@ -252,6 +253,9 @@ def render() -> None:
                 {'felt': 'selected_ticker_benchmark_chart', 'verdi': chart_detail.ticker},
                 {'felt': 'chart_period', 'verdi': chart_detail.chart_period_label},
                 {'felt': 'chart_calendar_start_date', 'verdi': chart_detail.calendar_start_date},
+                {'felt': 'chart_baseline_date', 'verdi': chart_detail.baseline_date},
+                {'felt': 'chart_baseline_ticker_close', 'verdi': chart_detail.baseline_ticker_close},
+                {'felt': 'chart_baseline_benchmark_close', 'verdi': chart_detail.baseline_benchmark_close},
                 {'felt': 'chart_first_visible_date', 'verdi': chart_detail.requested_start_date},
                 {'felt': 'chart_last_visible_date', 'verdi': chart_detail.requested_end_date},
                 {'felt': 'chart_first_close', 'verdi': chart_detail.first_close},
@@ -265,6 +269,7 @@ def render() -> None:
                 {'felt': 'chart_last_date', 'verdi': chart_detail.requested_end_date},
                 {'felt': 'chart_first_normalized_date', 'verdi': chart_detail.first_normalized_date},
                 {'felt': 'chart_first_indexed_ticker_value', 'verdi': chart_detail.first_indexed_ticker_value},
+                {'felt': 'chart_last_indexed_ticker_value', 'verdi': chart_detail.price_points[-1].indexed_close if chart_detail.price_points else None},
                 {'felt': 'chart_first_indexed_benchmark_value', 'verdi': chart_detail.first_indexed_benchmark_value},
                 {'felt': 'chart_first_rs_index_value', 'verdi': chart_detail.first_rs_index_value},
                 {'felt': 'chart_sma50_non_null_count', 'verdi': chart_detail.sma50_non_null_count},

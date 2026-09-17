@@ -222,6 +222,9 @@ class SelectedTickerChartDetail:
     last_close: float | None = None
     period_return_pct: float | None = None
     close_source: str = 'close'
+    baseline_date: str | None = None
+    baseline_ticker_close: float | None = None
+    baseline_benchmark_close: float | None = None
 
 
 def build_incumbent_screener_ui_result(
@@ -689,11 +692,27 @@ def build_selected_ticker_chart_detail(
         filtered_rows = limited_rows
         filtered_benchmark = {}
 
+    baseline_row = filtered_rows[0]
+    if calendar_start is not None:
+        # Use the prior common session even when the calendar start itself traded.
+        for row in reversed(ticker_rows):
+            if row.price_date < calendar_start and (not benchmark_ticker or row.price_date.isoformat() in benchmark_by_date):
+                baseline_row = row
+                break
+    baseline_date = baseline_row.price_date.isoformat()
+    ticker_baseline = float(baseline_row.close)
+    benchmark_baseline = float(benchmark_by_date[baseline_date]) if benchmark_ticker else None
+    chart_points = _build_price_points(
+        ticker=ticker.upper(), rows=filtered_rows, benchmark_by_date=filtered_benchmark,
+        sma_lookup=sma_lookup, ticker_baseline_close=ticker_baseline,
+        benchmark_baseline_close=benchmark_baseline,
+    )
+
     return SelectedTickerChartDetail(
         ticker=ticker.upper(),
         benchmark_ticker=benchmark_ticker,
         lookback_rows=lookback_rows,
-        price_points=_build_price_points(ticker=ticker.upper(), rows=filtered_rows, benchmark_by_date=filtered_benchmark, sma_lookup=sma_lookup),
+        price_points=chart_points,
         loaded_tickers=tuple(sorted(loaded_rows_by_ticker)),
         chart_period_label=chart_period_label,
         requested_start_date=(filtered_rows[0].price_date.isoformat() if filtered_rows else requested_start_date),
@@ -701,16 +720,19 @@ def build_selected_ticker_chart_detail(
         ticker_rows_found=len(ticker_rows),
         benchmark_rows_found=len(benchmark_rows),
         visible_rows=len(filtered_rows),
-        first_normalized_date=_first_point_value(filtered_rows, 'date'),
-        first_indexed_ticker_value=_first_indexed_value(filtered_rows, filtered_benchmark, 'ticker'),
-        first_indexed_benchmark_value=_first_indexed_value(filtered_rows, filtered_benchmark, 'benchmark'),
-        first_rs_index_value=_first_indexed_value(filtered_rows, filtered_benchmark, 'rs'),
+        first_normalized_date=baseline_date,
+        first_indexed_ticker_value=chart_points[0].indexed_close,
+        first_indexed_benchmark_value=chart_points[0].indexed_benchmark,
+        first_rs_index_value=chart_points[0].relative_strength_line,
         sma50_non_null_count=sum(1 for row in filtered_rows if sma_lookup.get(row.price_date.isoformat(), (None, None))[0] is not None),
         sma200_non_null_count=sum(1 for row in filtered_rows if sma_lookup.get(row.price_date.isoformat(), (None, None))[1] is not None),
         warning=None,
         first_close=float(filtered_rows[0].close) if filtered_rows else None,
         last_close=float(filtered_rows[-1].close) if filtered_rows else None,
-        period_return_pct=_chart_return_pct(filtered_rows),
+        period_return_pct=_chart_return_pct(filtered_rows, baseline_close=ticker_baseline),
+        baseline_date=baseline_date,
+        baseline_ticker_close=ticker_baseline,
+        baseline_benchmark_close=benchmark_baseline,
         **chart_metadata,
     )
 
@@ -817,16 +839,16 @@ def _build_price_points(
     rows,
     benchmark_by_date: Mapping[str, float],
     sma_lookup: Mapping[str, tuple[float | None, float | None]],
+    ticker_baseline_close: float | None = None,
+    benchmark_baseline_close: float | None = None,
 ) -> tuple[ScreenerChartPoint, ...]:
     closes = [float(row.close) for row in rows]
-    stock_indexed = _indexed_series(closes)
-    benchmark_closes = [benchmark_by_date.get(row.price_date.isoformat()) for row in rows]
-    benchmark_indexed = _indexed_series([value for value in benchmark_closes if value is not None]) if benchmark_by_date else []
+    stock_indexed = _indexed_series(closes, base=ticker_baseline_close)
     benchmark_index_lookup: dict[str, float] = {}
     if benchmark_by_date:
         aligned_dates = [row.price_date.isoformat() for row in rows]
         values = [benchmark_by_date[date_key] for date_key in aligned_dates]
-        indexed = _indexed_series(values)
+        indexed = _indexed_series(values, base=benchmark_baseline_close)
         benchmark_index_lookup = {date_key: indexed_value for date_key, indexed_value in zip(aligned_dates, indexed, strict=True)}
 
     points: list[ScreenerChartPoint] = []
@@ -864,10 +886,13 @@ def _chart_calendar_start(label: str, as_of_date: date) -> date | None:
     return date(year, month, min(as_of_date.day, monthrange(year, month)[1]))
 
 
-def _chart_return_pct(rows) -> float | None:
-    if not rows or not float(rows[0].close):
+def _chart_return_pct(rows, *, baseline_close: float | None = None) -> float | None:
+    if not rows:
         return None
-    return (float(rows[-1].close) / float(rows[0].close) - 1.0) * 100.0
+    base = float(rows[0].close) if baseline_close is None else baseline_close
+    if not base:
+        return None
+    return (float(rows[-1].close) / base - 1.0) * 100.0
 
 
 def _build_sma_lookup(rows) -> dict[str, tuple[float | None, float | None]]:
@@ -881,34 +906,6 @@ def _build_sma_lookup(rows) -> dict[str, tuple[float | None, float | None]]:
     return lookup
 
 
-def _first_point_value(rows, field: str) -> str | None:
-    if not rows:
-        return None
-    if field == 'date':
-        return rows[0].price_date.isoformat()
-    return None
-
-
-def _first_indexed_value(rows, benchmark_by_date: Mapping[str, float], value_type: str) -> float | None:
-    if not rows:
-        return None
-    first_close = float(rows[0].close)
-    if first_close == 0 or math.isnan(first_close):
-        return None
-    first_date = rows[0].price_date.isoformat()
-    benchmark_base = benchmark_by_date.get(first_date)
-    ticker_index = 100.0
-    if value_type == 'ticker':
-        return ticker_index
-    if benchmark_base in (None, 0):
-        return None
-    if value_type == 'benchmark':
-        return 100.0
-    if value_type == 'rs':
-        return (ticker_index / 100.0) * 100.0
-    return None
-
-
 def _rolling_mean(values: Sequence[float], end_index: int, window: int) -> float | None:
     start_index = end_index - window + 1
     if start_index < 0:
@@ -917,10 +914,11 @@ def _rolling_mean(values: Sequence[float], end_index: int, window: int) -> float
     return sum(window_values) / len(window_values)
 
 
-def _indexed_series(values: Sequence[float]) -> list[float]:
+def _indexed_series(values: Sequence[float], *, base: float | None = None) -> list[float]:
     if not values:
         return []
-    base = values[0]
+    if base is None:
+        base = values[0]
     if base == 0 or math.isnan(base):
         return []
     return [(value / base) * 100.0 for value in values]
