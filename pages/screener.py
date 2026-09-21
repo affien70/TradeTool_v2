@@ -12,8 +12,8 @@ from tradetool.ui.screener import (
     DEFAULT_CHART_PERIOD_LABEL,
     arrow_safe_display_rows,
     build_incumbent_screener_ui_result,
-    build_price_chart_spec,
-    build_relative_strength_chart_spec,
+    build_price_chart_figure,
+    build_relative_strength_chart_figure,
     build_selected_ticker_chart_detail,
     incumbent_candidate_explanation,
     incumbent_candidate_detail_rows,
@@ -62,13 +62,13 @@ def _default_screening_date(status: object) -> date:
 
 
 def _render_price_chart(chart_detail) -> None:
-    spec = build_price_chart_spec(chart_detail)
-    if spec is None:
+    figure = build_price_chart_figure(chart_detail)
+    if figure is None:
         st.warning(_chart_empty_warning(chart_detail))
         return
-    st.vega_lite_chart(
-        spec,
-        use_container_width=True,
+    st.plotly_chart(
+        figure,
+        width='stretch',
         key=f'price_chart_{chart_detail.ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}',
     )
 
@@ -76,13 +76,13 @@ def _render_price_chart(chart_detail) -> None:
 def _render_relative_strength_chart(chart_detail) -> None:
     if chart_detail.warning:
         st.warning(chart_detail.warning)
-    spec = build_relative_strength_chart_spec(chart_detail)
-    if spec is None:
+    figure = build_relative_strength_chart_figure(chart_detail)
+    if figure is None:
         st.warning(_chart_empty_warning(chart_detail))
         return
-    st.vega_lite_chart(
-        spec,
-        use_container_width=True,
+    st.plotly_chart(
+        figure,
+        width='stretch',
         key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}',
     )
 
@@ -248,10 +248,10 @@ def render() -> None:
         as_of_date_text=str(incumbent_result.as_of_date),
         chart_period_label=str(chart_period_label),
     )
-    price_tab, relative_tab = st.tabs(['Kurs', 'Benchmark og relativ styrke'])
-    with price_tab:
+    left_col, right_col = st.columns([3, 2])
+    with left_col:
         _render_price_chart(chart_detail)
-    with relative_tab:
+    with right_col:
         st.caption('Indeksert mot siste handelsdag før/ved periodestart.')
         _render_relative_strength_chart(chart_detail)
 

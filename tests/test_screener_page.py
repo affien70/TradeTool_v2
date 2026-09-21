@@ -38,7 +38,7 @@ class _StreamlitStub:
     def dataframe(self, *args, **kwargs) -> None:
         return None
 
-    def vega_lite_chart(self, *args, **kwargs) -> None:
+    def plotly_chart(self, *args, **kwargs) -> None:
         return None
 
     def cache_data(self, *args, **kwargs):
@@ -106,8 +106,8 @@ class ScreenerPageTests(unittest.TestCase):
 
         ui_module.build_minimal_screener_result = _fail
         ui_module.build_incumbent_screener_ui_result = _fail
-        ui_module.build_price_chart_spec = _fail
-        ui_module.build_relative_strength_chart_spec = _fail
+        ui_module.build_price_chart_figure = _fail
+        ui_module.build_relative_strength_chart_figure = _fail
         ui_module.build_selected_ticker_chart_detail = _fail
         ui_module.build_selected_ticker_detail = _fail
         ui_module.incumbent_candidate_explanation = _fail
@@ -200,6 +200,23 @@ class ScreenerPageTests(unittest.TestCase):
         self.assertIn("'selected_ticker_benchmark_chart'", source)
         self.assertIn("key=f'price_chart_{chart_detail.ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}'", source)
         self.assertIn("key=f'rs_chart_{chart_detail.ticker}_{chart_detail.benchmark_ticker}_{chart_detail.chart_period_label}_{chart_detail.requested_end_date}'", source)
+
+    def test_screener_page_uses_plotly_chart_rendering(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        self.assertIn('st.plotly_chart(', source)
+        self.assertNotIn('st.vega_lite_chart(', source)
+        self.assertNotIn('st.altair_chart(', source)
+        self.assertIn("width='stretch'", source)
+        chart_renderers = source.split('def _render_price_chart', 1)[1].split('\n\ndef _chart_empty_warning', 1)[0]
+        self.assertNotIn('use_container_width', chart_renderers)
+
+    def test_screener_page_places_plotly_charts_in_60_40_columns(self) -> None:
+        source = Path('pages/screener.py').read_text(encoding='utf-8')
+        chart_layout = source.split('chart_detail = _cached_selected_ticker_chart_detail(', 1)[1].split("\n\n    with st.expander('Tekniske detaljer'", 1)[0]
+        self.assertNotIn('st.tabs(', chart_layout)
+        self.assertIn('left_col, right_col = st.columns([3, 2])', chart_layout)
+        self.assertIn('with left_col:\n        _render_price_chart(chart_detail)', chart_layout)
+        self.assertIn("with right_col:\n        st.caption('Indeksert mot siste handelsdag før/ved periodestart.')\n        _render_relative_strength_chart(chart_detail)", chart_layout)
 
     def test_chart_cache_inputs_include_ticker_and_as_of_date(self) -> None:
         source = Path('pages/screener.py').read_text(encoding='utf-8')

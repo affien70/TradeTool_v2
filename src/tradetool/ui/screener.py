@@ -8,6 +8,9 @@ import math
 from datetime import date
 from pathlib import Path
 
+from plotly import graph_objects as go
+from plotly.subplots import make_subplots
+
 from tradetool.data import ReadOnlySQLite, load_price_history_for_tickers, load_price_history_v2_for_tickers
 from tradetool.diagnostics.candidate_type import build_candidate_type_diagnostics
 from tradetool.diagnostics.eligibility import build_eligibility_diagnostics
@@ -176,6 +179,7 @@ class ScreenerChartPoint:
     ticker: str
     price_date: str
     close: float
+    volume: float | None
     sma50: float | None
     sma200: float | None
     benchmark_close: float | None
@@ -188,6 +192,7 @@ class ScreenerChartPoint:
             'ticker': self.ticker,
             'price_date': self.price_date,
             'close': self.close,
+            'volume': self.volume,
             'sma50': self.sma50,
             'sma200': self.sma200,
             'benchmark_close': self.benchmark_close,
@@ -747,65 +752,74 @@ def build_selected_ticker_chart_detail(
     )
 
 
-def build_price_chart_spec(chart_detail: SelectedTickerChartDetail) -> dict[str, object] | None:
-    values = [point.to_dict() for point in chart_detail.price_points]
-    if not values:
+def build_price_chart_figure(chart_detail: SelectedTickerChartDetail) -> go.Figure | None:
+    if not chart_detail.price_points:
         return None
-    return {
-        'data': {'values': values},
-        'mark': {'type': 'line'},
-        'encoding': {
-            'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
-            'y': {'field': 'value', 'type': 'quantitative', 'title': 'Pris'},
-            'color': {'field': 'Serie', 'type': 'nominal', 'title': 'Serie'},
-        },
-        'transform': [
-            {'fold': ['close', 'sma50', 'sma200'], 'as': ['series', 'value']},
-            {'calculate': "datum.series == 'close' ? 'Kurs' : datum.series == 'sma50' ? 'SMA50' : 'SMA200'", 'as': 'Serie'},
-            {'filter': 'isValid(datum.value)'},
-        ],
-        'height': 300,
-    }
+    dates = [point.price_date for point in chart_detail.price_points]
+    figure = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.04,
+        row_heights=[0.8, 0.2],
+    )
+    figure.add_trace(
+        go.Scatter(x=dates, y=[point.close for point in chart_detail.price_points], mode='lines', name='Kurs'),
+        row=1,
+        col=1,
+    )
+    if any(point.sma50 is not None for point in chart_detail.price_points):
+        figure.add_trace(
+            go.Scatter(x=dates, y=[point.sma50 for point in chart_detail.price_points], mode='lines', name='SMA50'),
+            row=1,
+            col=1,
+        )
+    if any(point.sma200 is not None for point in chart_detail.price_points):
+        figure.add_trace(
+            go.Scatter(x=dates, y=[point.sma200 for point in chart_detail.price_points], mode='lines', name='SMA200'),
+            row=1,
+            col=1,
+        )
+    figure.add_trace(
+        go.Bar(x=dates, y=[point.volume for point in chart_detail.price_points], name='Volum'),
+        row=2,
+        col=1,
+    )
+    figure.update_layout(height=720, hovermode='x unified', margin={'l': 70, 'r': 30, 't': 30, 'b': 50})
+    figure.update_xaxes(showticklabels=False, row=1, col=1)
+    figure.update_xaxes(title_text='Dato', row=2, col=1)
+    figure.update_yaxes(title_text='Pris', row=1, col=1)
+    figure.update_yaxes(title_text='Volum', row=2, col=1)
+    return figure
 
 
-def build_relative_strength_chart_spec(chart_detail: SelectedTickerChartDetail) -> dict[str, object] | None:
-    values = [point.to_dict() for point in chart_detail.price_points]
-    if not values:
+def build_relative_strength_chart_figure(chart_detail: SelectedTickerChartDetail) -> go.Figure | None:
+    if not chart_detail.price_points:
         return None
-    return {
-        'data': {'values': values},
-        'vconcat': [
-            {
-                'mark': {'type': 'line'},
-                'encoding': {
-                    'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
-                    'y': {'field': 'value', 'type': 'quantitative', 'title': 'Indeksert verdi'},
-                    'color': {'field': 'Serie', 'type': 'nominal', 'title': 'Serie'},
-                },
-                'transform': [
-                    {'fold': ['indexed_close', 'indexed_benchmark'], 'as': ['series', 'value']},
-                    {
-                        'calculate': (
-                            f"datum.series == 'indexed_close' ? '{chart_detail.ticker}' : "
-                            f"'{chart_detail.benchmark_ticker or 'Benchmark'}'"
-                        ),
-                        'as': 'Serie',
-                    },
-                    {'filter': 'isValid(datum.value)'},
-                ],
-                'height': 210,
-            },
-            {
-                'mark': {'type': 'line', 'color': '#f97316'},
-                'encoding': {
-                    'x': {'field': 'price_date', 'type': 'temporal', 'title': 'Dato'},
-                    'y': {'field': 'relative_strength_line', 'type': 'quantitative', 'title': 'Relativ styrke-indeks mot benchmark'},
-                },
-                'transform': [{'filter': 'isValid(datum.relative_strength_line)'}],
-                'height': 150,
-            },
-        ],
-    }
+    dates = [point.price_date for point in chart_detail.price_points]
+    figure = go.Figure()
+    figure.add_trace(
+        go.Scatter(
+            x=dates,
+            y=[point.indexed_close - 100.0 if point.indexed_close is not None else None for point in chart_detail.price_points],
+            mode='lines',
+            name=chart_detail.ticker,
+        ),
+    )
+    if chart_detail.benchmark_ticker and any(point.indexed_benchmark is not None for point in chart_detail.price_points):
+        figure.add_trace(
+            go.Scatter(
+                x=dates,
+                y=[point.indexed_benchmark - 100.0 if point.indexed_benchmark is not None else None for point in chart_detail.price_points],
+                mode='lines',
+                name=chart_detail.benchmark_ticker,
+            ),
+        )
+    figure.add_hline(y=0, line={'color': '#9ca3af', 'width': 1})
+    figure.update_layout(height=720, hovermode='x unified', margin={'l': 80, 'r': 30, 't': 30, 'b': 50})
+    figure.update_xaxes(title_text='Dato')
+    figure.update_yaxes(title_text='Utvikling (%)')
+    return figure
 
 
 def _build_signal_type_matrix(rows: Sequence) -> tuple[CandidateSignalMatrixRow, ...]:
@@ -875,6 +889,7 @@ def _build_price_points(
                 ticker=ticker,
                 price_date=date_key,
                 close=float(row.close),
+                volume=(float(row.volume) if row.volume is not None and math.isfinite(float(row.volume)) else None),
                 sma50=sma50,
                 sma200=sma200,
                 benchmark_close=benchmark_by_date.get(date_key),

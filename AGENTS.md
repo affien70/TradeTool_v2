@@ -77,6 +77,14 @@ Keep each Streamlit page independently scoped.
 Do not modify Holdings/Beholdning while working on Screener unless explicitly
 requested, and vice versa.
 
+## Application charts
+
+TradeTool application charts must use Plotly. Do not introduce Vega-Lite,
+Altair, or Streamlit built-in chart APIs unless explicitly authorized.
+
+Future Holdings charts must follow the same Plotly rule. Chart rendering remains
+UI/presentation logic and must not absorb engine or business logic.
+
 ## Database and production safety
 
 NEVER create a database merely because one is missing.

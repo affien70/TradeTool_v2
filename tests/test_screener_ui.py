@@ -6,6 +6,9 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
+
+from plotly.graph_objects import Figure
 
 from tradetool.data.market_data_schema import MarketDataRow, initialize_market_data_schema, write_market_data_rows_for_test
 from tradetool.policy.candidate_type import CANDIDATE_TYPE_ENGINE_ID
@@ -30,8 +33,8 @@ from tradetool.ui.screener import (
     PRICE_TABLE_V2,
     build_incumbent_screener_ui_result,
     build_minimal_screener_result,
-    build_price_chart_spec,
-    build_relative_strength_chart_spec,
+    build_price_chart_figure,
+    build_relative_strength_chart_figure,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
     arrow_safe_display_rows,
@@ -43,6 +46,7 @@ from tradetool.ui.screener import (
     incumbent_screener_ticker_options,
     resolve_incumbent_selected_ticker,
 )
+from tradetool.ui import screener as screener_ui
 
 
 def _insert_rows(connection: sqlite3.Connection, ticker: str, closes: list[float], *, last_date: date, volume: float = 100.0) -> None:
@@ -109,6 +113,10 @@ def _build_fixture_v2_db(path: Path) -> None:
         rows.append(_sample_v2_row(ticker='CAMBI.OL', price_date=day, raw_close=100.0 + index, adjusted_close=80.0 + index, volume=2000.0 + index))
         rows.append(_sample_v2_row(ticker='SNTIA.OL', price_date=day, raw_close=120.0 + index, adjusted_close=90.0 + index, volume=2200.0 + index))
         rows.append(_sample_v2_row(ticker='GOD.OL', price_date=day, raw_close=140.0 + index, adjusted_close=100.0 + index, volume=2400.0 + index))
+        rows.append(_sample_v2_row(ticker='BCS.OL', price_date=day, raw_close=40.0 + index * 0.4, adjusted_close=30.0 + index * 0.4, volume=2600.0 + index))
+        rows.append(_sample_v2_row(ticker='OET.OL', price_date=day, raw_close=80.0 + index * 0.9, adjusted_close=70.0 + index * 0.9, volume=2800.0 + index))
+        rows.append(_sample_v2_row(ticker='TEKNA.OL', price_date=day, raw_close=20.0 + index * 0.3, adjusted_close=15.0 + index * 0.3, volume=3000.0 + index))
+        rows.append(_sample_v2_row(ticker='SOFTX.OL', price_date=day, raw_close=10.0 + index * 0.2, adjusted_close=8.0 + index * 0.2, volume=3200.0 + index))
         rows.append(_sample_v2_row(ticker='OSEBX.OL', price_date=day, raw_close=300.0 + index, adjusted_close=260.0 + index, volume=4000.0 + index))
     write_market_data_rows_for_test(db_path=path, rows=rows, allow_test_db_write=True)
 
@@ -306,27 +314,39 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         if db_path.exists():
             db_path.unlink()
         _build_fixture_v2_db(db_path)
-        chart = build_selected_ticker_chart_detail(
-            db_path=db_path,
-            ticker='CAMBI.OL',
-            benchmark_ticker='OSEBX.OL',
-            price_table=PRICE_TABLE_V2,
-            data_source='yahoo',
-        )
+        with patch.object(
+            screener_ui,
+            'load_price_history_v2_for_tickers',
+            wraps=screener_ui.load_price_history_v2_for_tickers,
+        ) as load_price_history:
+            chart = build_selected_ticker_chart_detail(
+                db_path=db_path,
+                ticker='CAMBI.OL',
+                benchmark_ticker='OSEBX.OL',
+                price_table=PRICE_TABLE_V2,
+                data_source='yahoo',
+            )
+            price_figure = build_price_chart_figure(chart)
+        load_price_history.assert_called_once()
         self.assertEqual(set(chart.loaded_tickers), {'CAMBI.OL', 'OSEBX.OL'})
         self.assertTrue(all(point.ticker == 'CAMBI.OL' for point in chart.price_points))
         self.assertEqual(chart.price_points[-1].close, 339.0)
+        self.assertEqual(chart.price_points[-1].volume, 2259.0)
+        self.assertEqual(chart.price_points[-1].to_dict()['volume'], 2259.0)
         self.assertIsNone(chart.warning)
-        price_spec = build_price_chart_spec(chart)
-        benchmark_spec = build_relative_strength_chart_spec(chart)
-        self.assertIsNotNone(price_spec)
-        self.assertIsNotNone(benchmark_spec)
-        assert price_spec is not None
-        assert benchmark_spec is not None
-        self.assertGreater(len(price_spec['data']['values']), 0)
-        self.assertEqual({row['ticker'] for row in price_spec['data']['values']}, {'CAMBI.OL'})
-        self.assertEqual(price_spec['transform'][0]['fold'], ['close', 'sma50', 'sma200'])
-        self.assertEqual(benchmark_spec['vconcat'][0]['transform'][0]['fold'], ['indexed_close', 'indexed_benchmark'])
+        benchmark_figure = build_relative_strength_chart_figure(chart)
+        self.assertIsNotNone(price_figure)
+        self.assertIsNotNone(benchmark_figure)
+        assert price_figure is not None
+        assert benchmark_figure is not None
+        self.assertEqual([trace.name for trace in price_figure.data], ['Kurs', 'SMA50', 'SMA200', 'Volum'])
+        self.assertEqual(price_figure.data[0].y[-1], 339.0)
+        self.assertEqual(price_figure.data[3].type, 'bar')
+        self.assertEqual(price_figure.data[3].y[-1], chart.price_points[-1].volume)
+        self.assertEqual(price_figure.data[0].yaxis, 'y')
+        self.assertEqual(price_figure.data[3].yaxis, 'y2')
+        self.assertEqual(price_figure.layout.xaxis.matches, 'x2')
+        self.assertEqual([trace.name for trace in benchmark_figure.data], ['CAMBI.OL', 'OSEBX.OL'])
         db_path.unlink()
 
     def test_v2_chart_period_changes_visible_range_only(self) -> None:
@@ -544,7 +564,7 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
                 (chart.price_points[0].benchmark_close or 0.0) / (chart.baseline_benchmark_close or 1.0) * 100.0,
             )
 
-    def test_v2_chart_specs_use_user_friendly_series_labels(self) -> None:
+    def test_v2_chart_figures_preserve_series_and_labels(self) -> None:
         db_path = Path('/tmp/tradetool_v2_screener_ui_chart_labels.sqlite')
         if db_path.exists():
             db_path.unlink()
@@ -556,19 +576,41 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             price_table=PRICE_TABLE_V2,
             data_source='yahoo',
         )
-        price_spec = build_price_chart_spec(chart)
-        benchmark_spec = build_relative_strength_chart_spec(chart)
-        assert price_spec is not None and benchmark_spec is not None
-        self.assertEqual(price_spec['encoding']['color']['field'], 'Serie')
-        self.assertIn("'Kurs'", price_spec['transform'][1]['calculate'])
-        self.assertIn("'SMA50'", price_spec['transform'][1]['calculate'])
-        self.assertIn("'SMA200'", price_spec['transform'][1]['calculate'])
-        self.assertIn("'CAMBI.OL'", benchmark_spec['vconcat'][0]['transform'][1]['calculate'])
-        self.assertIn("'OSEBX.OL'", benchmark_spec['vconcat'][0]['transform'][1]['calculate'])
-        self.assertEqual(benchmark_spec['vconcat'][1]['encoding']['y']['title'], 'Relativ styrke-indeks mot benchmark')
+        price_figure = build_price_chart_figure(chart)
+        rs_figure = build_relative_strength_chart_figure(chart)
+        assert price_figure is not None and rs_figure is not None
+        self.assertIsInstance(price_figure, Figure)
+        self.assertIsInstance(rs_figure, Figure)
+        self.assertEqual([trace.name for trace in price_figure.data], ['Kurs', 'SMA50', 'SMA200', 'Volum'])
+        self.assertEqual([trace.name for trace in rs_figure.data], ['CAMBI.OL', 'OSEBX.OL'])
+        self.assertEqual(price_figure.layout.height, 720)
+        self.assertEqual(rs_figure.layout.height, 720)
+        self.assertEqual(rs_figure.layout.yaxis.title.text, 'Utvikling (%)')
+        self.assertNotIn('Relativ styrke-indeks', [trace.name for trace in rs_figure.data])
+        self.assertTrue(any(shape.y0 == 0 and shape.y1 == 0 for shape in rs_figure.layout.shapes))
         db_path.unlink()
 
-    def test_v2_chart_data_changes_with_selected_ticker(self) -> None:
+    def test_v2_comparison_figure_converts_indexed_values_to_percent_change(self) -> None:
+        points = (
+            screener_ui.ScreenerChartPoint('TEST.OL', '2025-01-01', 10.0, 100.0, None, None, 10.0, 100.0, 100.0, 100.0),
+            screener_ui.ScreenerChartPoint('TEST.OL', '2025-01-02', 15.0, 150.0, None, None, 15.0, 150.0, 150.0, 100.0),
+            screener_ui.ScreenerChartPoint('TEST.OL', '2025-01-03', 8.0, 80.0, None, None, 8.0, 80.0, 80.0, 100.0),
+        )
+        chart = screener_ui.SelectedTickerChartDetail(
+            ticker='TEST.OL',
+            benchmark_ticker='OSEBX.OL',
+            lookback_rows=3,
+            price_points=points,
+            loaded_tickers=('OSEBX.OL', 'TEST.OL'),
+        )
+
+        figure = build_relative_strength_chart_figure(chart)
+
+        assert figure is not None
+        self.assertEqual(list(figure.data[0].y), [0.0, 50.0, -20.0])
+        self.assertEqual(list(figure.data[1].y), [0.0, 50.0, -20.0])
+
+    def test_v2_plotly_chart_data_changes_with_selected_ticker(self) -> None:
         db_path = Path('/tmp/tradetool_v2_screener_ui_chart_selection.sqlite')
         if db_path.exists():
             db_path.unlink()
@@ -589,15 +631,42 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
             data_source='yahoo',
             max_price_date=date(2025, 9, 17),
         )
-        cambi_spec = build_price_chart_spec(cambi_chart)
-        sntia_spec = build_price_chart_spec(sntia_chart)
-        assert cambi_spec is not None and sntia_spec is not None
+        cambi_figure = build_price_chart_figure(cambi_chart)
+        sntia_figure = build_price_chart_figure(sntia_chart)
+        assert cambi_figure is not None and sntia_figure is not None
 
-        self.assertEqual({row['ticker'] for row in cambi_spec['data']['values']}, {'CAMBI.OL'})
-        self.assertEqual({row['ticker'] for row in sntia_spec['data']['values']}, {'SNTIA.OL'})
-        self.assertNotEqual(cambi_spec['data']['values'][-1]['close'], sntia_spec['data']['values'][-1]['close'])
+        self.assertNotEqual(cambi_figure.to_plotly_json()['data'], sntia_figure.to_plotly_json()['data'])
         self.assertNotEqual(cambi_chart.ticker, sntia_chart.ticker)
         db_path.unlink()
+
+    def test_v2_plotly_chart_payloads_differ_for_named_ticker_pairs(self) -> None:
+        with tempfile.TemporaryDirectory(dir='/tmp') as temp_dir:
+            db_path = Path(temp_dir) / 'chart_pairs.sqlite'
+            _build_fixture_v2_db(db_path)
+            for left_ticker, right_ticker in (('BCS.OL', 'OET.OL'), ('TEKNA.OL', 'SOFTX.OL')):
+                with self.subTest(left_ticker=left_ticker, right_ticker=right_ticker):
+                    left_chart = build_selected_ticker_chart_detail(
+                        db_path=db_path,
+                        ticker=left_ticker,
+                        benchmark_ticker='OSEBX.OL',
+                        price_table=PRICE_TABLE_V2,
+                        data_source='yahoo',
+                    )
+                    right_chart = build_selected_ticker_chart_detail(
+                        db_path=db_path,
+                        ticker=right_ticker,
+                        benchmark_ticker='OSEBX.OL',
+                        price_table=PRICE_TABLE_V2,
+                        data_source='yahoo',
+                    )
+                    left_price = build_price_chart_figure(left_chart)
+                    right_price = build_price_chart_figure(right_chart)
+                    left_rs = build_relative_strength_chart_figure(left_chart)
+                    right_rs = build_relative_strength_chart_figure(right_chart)
+                    assert left_price is not None and right_price is not None
+                    assert left_rs is not None and right_rs is not None
+                    self.assertNotEqual(left_price.to_plotly_json()['data'], right_price.to_plotly_json()['data'])
+                    self.assertNotEqual(left_rs.to_plotly_json()['data'], right_rs.to_plotly_json()['data'])
 
     def test_v2_chart_respects_as_of_cap(self) -> None:
         db_path = Path('/tmp/tradetool_v2_screener_ui_chart_cap.sqlite')
@@ -631,7 +700,7 @@ class ScreenerUiOrchestrationTests(unittest.TestCase):
         self.assertIn('Rader funnet for ticker: 260', str(chart.warning))
         self.assertIn('Rader funnet for benchmark: 0', str(chart.warning))
         self.assertGreater(len(chart.price_points), 0)
-        self.assertIsNotNone(build_price_chart_spec(chart))
+        self.assertIsNotNone(build_price_chart_figure(chart))
         db_path.unlink()
 
     def test_v2_mode_does_not_write_to_database(self) -> None:

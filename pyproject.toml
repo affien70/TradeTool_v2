@@ -9,6 +9,7 @@ description = 'Standalone Phase 2 foundation for TradeTool v2'
 readme = 'README.md'
 requires-python = '>=3.12'
 dependencies = [
+    'plotly==6.9.0',
     'yfinance==0.2.65',
 ]
 
