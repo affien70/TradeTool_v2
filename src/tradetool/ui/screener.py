@@ -276,6 +276,16 @@ def incumbent_screener_summary_rows(result) -> list[dict[str, object]]:
     return v1_summary_rows(result)
 
 
+def arrow_safe_display_rows(rows: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
+    return [
+        {
+            **row,
+            'verdi': '' if row.get('verdi') is None else str(row.get('verdi')),
+        }
+        for row in rows
+    ]
+
+
 def incumbent_screener_ticker_options(table_rows: Sequence[Mapping[str, object]]) -> list[str]:
     return v1_screener_ticker_options(table_rows)
 

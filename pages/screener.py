@@ -10,6 +10,7 @@ from tradetool.ui.company_names import company_name_for, load_company_names
 from tradetool.ui.screener import (
     CHART_PERIOD_CALENDAR_MONTHS,
     DEFAULT_CHART_PERIOD_LABEL,
+    arrow_safe_display_rows,
     build_incumbent_screener_ui_result,
     build_price_chart_spec,
     build_relative_strength_chart_spec,
@@ -230,7 +231,7 @@ def render() -> None:
     detail_columns[3].metric('Pris', f"{float(selected_row.get('close')):.2f}" if selected_row.get('close') is not None else '')
     st.caption(f'Risikomerknad, ikke del av rangeringen: {incumbent_candidate_explanation(selected_row)}')
     with st.expander('Nøkkeltall og risikoflagg', expanded=False):
-        st.dataframe(incumbent_candidate_detail_rows(selected_row), use_container_width=True, hide_index=True)
+        st.dataframe(arrow_safe_display_rows(incumbent_candidate_detail_rows(selected_row)), use_container_width=True, hide_index=True)
     chart_period_options = list(CHART_PERIOD_CALENDAR_MONTHS)
     chart_period_label = st.selectbox(
         'Grafperiode',
@@ -256,9 +257,9 @@ def render() -> None:
 
     with st.expander('Tekniske detaljer', expanded=False):
         st.caption(f'Database: {db_status.configured_path_text} | price_history_v2-rader: {db_status.row_count}')
-        st.dataframe(incumbent_screener_summary_rows(incumbent_result), use_container_width=True, hide_index=True)
+        st.dataframe(arrow_safe_display_rows(incumbent_screener_summary_rows(incumbent_result)), use_container_width=True, hide_index=True)
         st.dataframe(
-            [
+            arrow_safe_display_rows([
                 {'felt': 'selected_ticker_detail', 'verdi': detail_ticker},
                 {'felt': 'selected_ticker_price_chart', 'verdi': chart_detail.ticker},
                 {'felt': 'selected_ticker_benchmark_chart', 'verdi': chart_detail.ticker},
@@ -285,20 +286,20 @@ def render() -> None:
                 {'felt': 'chart_first_rs_index_value', 'verdi': chart_detail.first_rs_index_value},
                 {'felt': 'chart_sma50_non_null_count', 'verdi': chart_detail.sma50_non_null_count},
                 {'felt': 'chart_sma200_non_null_count', 'verdi': chart_detail.sma200_non_null_count},
-            ],
+            ]),
             use_container_width=True,
             hide_index=True,
         )
         st.dataframe(incumbent_screener_eligible_table_rows(incumbent_result), use_container_width=True, hide_index=True)
         st.dataframe(list(incumbent_result.rejections), use_container_width=True, hide_index=True)
         st.dataframe(
-            [
+            arrow_safe_display_rows([
                 {'felt': 'baseline_id', 'verdi': incumbent_result.baseline_id},
                 {'felt': 'universe_source', 'verdi': incumbent_result.universe_source},
                 {'felt': 'requested_stock_ticker_count', 'verdi': incumbent_result.requested_stock_ticker_count},
                 {'felt': 'close_input_source', 'verdi': incumbent_result.close_input_source},
                 {'felt': 'risk_tags_are_filters', 'verdi': False},
-            ],
+            ]),
             use_container_width=True,
             hide_index=True,
         )

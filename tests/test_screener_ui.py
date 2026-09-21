@@ -34,6 +34,7 @@ from tradetool.ui.screener import (
     build_relative_strength_chart_spec,
     build_selected_ticker_chart_detail,
     build_selected_ticker_detail,
+    arrow_safe_display_rows,
     incumbent_candidate_explanation,
     incumbent_candidate_detail_rows,
     incumbent_screener_summary_rows,
@@ -122,6 +123,21 @@ def _build_incumbent_universe_db(path: Path) -> None:
 
 
 class ScreenerUiOrchestrationTests(unittest.TestCase):
+    def test_arrow_safe_display_rows_normalizes_verdi_to_strings(self) -> None:
+        source = [
+            {'felt': 'ticker', 'verdi': 'DNB.OL'},
+            {'felt': 'close', 'verdi': 123.45},
+            {'felt': 'count', 'verdi': 5},
+            {'felt': 'flag', 'verdi': False},
+            {'felt': 'missing', 'verdi': None},
+        ]
+
+        display_rows = arrow_safe_display_rows(source)
+
+        self.assertEqual([row['verdi'] for row in display_rows], ['DNB.OL', '123.45', '5', 'False', ''])
+        self.assertTrue(all(isinstance(row['verdi'], str) for row in display_rows))
+        self.assertEqual(source[1]['verdi'], 123.45)
+
     def test_orchestration_returns_expected_summary_from_synthetic_db(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / 'fixture.sqlite'

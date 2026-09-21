@@ -99,6 +99,7 @@ class ScreenerPageTests(unittest.TestCase):
         ui_module = types.ModuleType('tradetool.ui.screener')
         ui_module.CHART_PERIOD_CALENDAR_MONTHS = {'1 år': 12}
         ui_module.DEFAULT_CHART_PERIOD_LABEL = '1 år'
+        ui_module.arrow_safe_display_rows = lambda rows: rows
 
         def _fail(*args, **kwargs):
             raise AssertionError('database access helper should not run during import')
