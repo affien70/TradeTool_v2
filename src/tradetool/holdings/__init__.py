@@ -11,6 +11,7 @@ from tradetool.holdings.core import (
 	reconstruct_position,
 	transaction_identity,
 )
+from tradetool.holdings.market_data import HoldingMarketDataResult, build_holding_signal_inputs_from_v2_price_history
 from tradetool.holdings.signals import HoldingSignalEvaluation, HoldingSignalInputs, HoldingSignalRules, evaluate_holding_signal
 from tradetool.holdings.storage import (
 	DEFAULT_NORWAY_BENCHMARK_ID,
@@ -39,6 +40,7 @@ __all__ = [
 	'DEFAULT_NORWAY_BENCHMARK_ID',
 	'HoldingTransaction',
 	'HoldingTransactionRecord',
+	'HoldingMarketDataResult',
 	'V1HoldingsImportResult',
 	'V1HoldingsSettingsImportResult',
 	'HoldingSignalEvaluation',
@@ -50,6 +52,7 @@ __all__ = [
 	'PositionState',
 	'TransactionIdentity',
 	'canonicalize_transactions',
+	'build_holding_signal_inputs_from_v2_price_history',
 	'evaluate_holding_signal',
 	'fallback_transaction_key',
 	'dry_run_v1_holdings_import',
