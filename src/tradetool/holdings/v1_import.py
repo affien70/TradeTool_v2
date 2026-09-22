@@ -11,12 +11,15 @@ from tradetool.holdings.core import HoldingTransaction, fallback_transaction_key
 from tradetool.holdings.storage import (
     HOLDINGS_SETTINGS_TABLE,
     HOLDINGS_TRANSACTIONS_TABLE,
+    HoldingSettings,
     HoldingTransactionRecord,
+    save_holding_settings,
     upsert_holding_transaction,
 )
 
 
 V1_HOLDINGS_TABLE = 'holdings'
+V1_APP_SETTINGS_TABLE = 'app_settings'
 _V1_SOURCE_COLUMNS = (
     'id',
     'ticker',
@@ -38,6 +41,16 @@ _V1_SOURCE_COLUMNS = (
     'transaction_key',
     'cost_basis_missing',
 )
+_V1_HOLDINGS_SETTING_KEYS = (
+    'period_label',
+    'rs_months',
+    'sell_rs_weak',
+    'sell_below_cost_basis',
+    'sell_drop_from_peak',
+    'holdings_sell_sma_days',
+    'holdings_atr_multiplier',
+    'sell_rs_threshold',
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +63,15 @@ class V1HoldingsImportResult:
     would_insert: int
     would_update: int
     would_skip: int
+    written_rows: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class V1HoldingsSettingsImportResult:
+    recognized_setting_keys_found: tuple[str, ...]
+    recognized_setting_keys_missing: tuple[str, ...]
+    invalid_recognized_setting_keys: tuple[str, ...]
+    settings: HoldingSettings | None
     written_rows: int = 0
 
 
@@ -113,6 +135,40 @@ def import_v1_holdings(
     )
 
 
+def dry_run_v1_holdings_settings_import(
+    v1_database_path: str | Path,
+    *,
+    target_connection: sqlite3.Connection | None = None,
+    norway_benchmark_id: str | None = None,
+) -> V1HoldingsSettingsImportResult:
+    if target_connection is not None:
+        _require_initialized_target_schema(target_connection)
+    return _read_v1_holding_settings(v1_database_path, norway_benchmark_id=norway_benchmark_id)
+
+
+def import_v1_holdings_settings(
+    v1_database_path: str | Path,
+    *,
+    target_connection: sqlite3.Connection,
+    norway_benchmark_id: str | None = None,
+) -> V1HoldingsSettingsImportResult:
+    _require_initialized_target_schema(target_connection)
+    result = _read_v1_holding_settings(v1_database_path, norway_benchmark_id=norway_benchmark_id)
+    if result.invalid_recognized_setting_keys:
+        invalid_keys = ', '.join(result.invalid_recognized_setting_keys)
+        raise ValueError(f'V1 Holdings settings import contains invalid recognized keys: {invalid_keys}')
+    if result.settings is None:
+        raise RuntimeError('V1 Holdings settings import did not produce typed settings.')
+    save_holding_settings(target_connection, result.settings)
+    return V1HoldingsSettingsImportResult(
+        recognized_setting_keys_found=result.recognized_setting_keys_found,
+        recognized_setting_keys_missing=result.recognized_setting_keys_missing,
+        invalid_recognized_setting_keys=(),
+        settings=result.settings,
+        written_rows=1,
+    )
+
+
 def _read_v1_records(
     v1_database_path: str | Path,
 ) -> tuple[list[HoldingTransactionRecord], int, int, int, int]:
@@ -147,6 +203,63 @@ def _read_v1_records(
         seen_fallback_keys.add(record.fallback_key)
         records.append(record)
     return records, len(rows), invalid_rows, duplicate_broker_rows, duplicate_fallback_rows
+
+
+def _read_v1_holding_settings(
+    v1_database_path: str | Path,
+    *,
+    norway_benchmark_id: str | None,
+) -> V1HoldingsSettingsImportResult:
+    v1_path = _validate_v1_database_path(v1_database_path)
+    placeholders = ', '.join('?' for _ in _V1_HOLDINGS_SETTING_KEYS)
+    with sqlite3.connect(f'file:{v1_path}?mode=ro', uri=True) as connection:
+        connection.row_factory = sqlite3.Row
+        _require_v1_app_settings_schema(connection)
+        rows = connection.execute(
+            f'SELECT setting_key, setting_value FROM {_quote_identifier(V1_APP_SETTINGS_TABLE)} '
+            f'WHERE setting_key IN ({placeholders}) ORDER BY setting_key ASC',
+            _V1_HOLDINGS_SETTING_KEYS,
+        ).fetchall()
+
+    values_by_key = {str(row['setting_key']): row['setting_value'] for row in rows}
+    found_keys = tuple(key for key in _V1_HOLDINGS_SETTING_KEYS if key in values_by_key)
+    missing_keys = tuple(key for key in _V1_HOLDINGS_SETTING_KEYS if key not in values_by_key)
+    settings_values: dict[str, object] = {
+        'period_label': HoldingSettings().period_label,
+        'rs_months': HoldingSettings().rs_months,
+        'sell_rs_weak': HoldingSettings().sell_rs_weak,
+        'sell_below_cost_basis': HoldingSettings().sell_below_cost_basis,
+        'sell_drop_from_peak': HoldingSettings().sell_drop_from_peak,
+        'sell_fast_sma_days': HoldingSettings().sell_fast_sma_days,
+        'atr_multiplier': HoldingSettings().atr_multiplier,
+        'rs_threshold': HoldingSettings().rs_threshold,
+        'norway_benchmark_id': _validated_benchmark_id(norway_benchmark_id),
+    }
+    parsers = {
+        'period_label': ('period_label', _period_label_value),
+        'rs_months': ('rs_months', _allowed_rs_months_value),
+        'sell_rs_weak': ('sell_rs_weak', _v1_boolean_value),
+        'sell_below_cost_basis': ('sell_below_cost_basis', _v1_boolean_value),
+        'sell_drop_from_peak': ('sell_drop_from_peak', _v1_boolean_value),
+        'holdings_sell_sma_days': ('sell_fast_sma_days', _non_negative_integer_value),
+        'holdings_atr_multiplier': ('atr_multiplier', _positive_finite_float_value),
+        'sell_rs_threshold': ('rs_threshold', _positive_finite_float_value),
+    }
+    invalid_keys: list[str] = []
+    for source_key in found_keys:
+        target_key, parser = parsers[source_key]
+        try:
+            settings_values[target_key] = parser(values_by_key[source_key])
+        except (TypeError, ValueError):
+            invalid_keys.append(source_key)
+
+    settings = None if invalid_keys else HoldingSettings(**settings_values)
+    return V1HoldingsSettingsImportResult(
+        recognized_setting_keys_found=found_keys,
+        recognized_setting_keys_missing=missing_keys,
+        invalid_recognized_setting_keys=tuple(invalid_keys),
+        settings=settings,
+    )
 
 
 def _map_v1_row(row: sqlite3.Row) -> HoldingTransactionRecord:
@@ -213,6 +326,17 @@ def _require_v1_holdings_schema(connection: sqlite3.Connection) -> None:
         raise ValueError(f'V1 holdings schema is missing required source columns: {missing_text}')
 
 
+def _require_v1_app_settings_schema(connection: sqlite3.Connection) -> None:
+    columns = {
+        str(row[1])
+        for row in connection.execute(f'PRAGMA table_info({_quote_identifier(V1_APP_SETTINGS_TABLE)})').fetchall()
+    }
+    missing_columns = {'setting_key', 'setting_value'} - columns
+    if missing_columns:
+        missing_text = ', '.join(sorted(missing_columns))
+        raise ValueError(f'V1 app_settings schema is missing required columns: {missing_text}')
+
+
 def _validate_v1_database_path(v1_database_path: str | Path) -> Path:
     resolved = Path(v1_database_path).expanduser().resolve()
     if not resolved.exists() or not resolved.is_file():
@@ -260,3 +384,56 @@ def _boolean_value(value: object, *, field_name: str) -> bool:
     if value in (0, 1, False, True):
         return bool(value)
     raise ValueError(f'{field_name} must be 0 or 1.')
+
+
+def _period_label_value(value: object) -> str:
+    result = str(value or '').strip()
+    if result not in {'1 år', '2 år', '5 år'}:
+        raise ValueError('period_label is invalid.')
+    return result
+
+
+def _allowed_rs_months_value(value: object) -> int:
+    result = _integer_value(value)
+    if result not in {3, 6, 12}:
+        raise ValueError('rs_months is invalid.')
+    return result
+
+
+def _v1_boolean_value(value: object) -> bool:
+    normalized = str(value or '').strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    raise ValueError('Boolean setting is invalid.')
+
+
+def _non_negative_integer_value(value: object) -> int:
+    result = _integer_value(value)
+    if result < 0:
+        raise ValueError('Integer setting must be non-negative.')
+    return result
+
+
+def _integer_value(value: object) -> int:
+    text = str(value or '').strip()
+    if not text or not text.isascii() or not text.lstrip('-').isdigit():
+        raise ValueError('Integer setting is invalid.')
+    return int(text)
+
+
+def _positive_finite_float_value(value: object) -> float:
+    result = float(str(value or '').strip())
+    if not isfinite(result) or result <= 0:
+        raise ValueError('Float setting must be finite and positive.')
+    return result
+
+
+def _validated_benchmark_id(value: str | None) -> str:
+    if value is None:
+        return HoldingSettings().norway_benchmark_id
+    result = value.strip()
+    if not result:
+        raise ValueError('norway_benchmark_id must be non-empty when overridden.')
+    return result

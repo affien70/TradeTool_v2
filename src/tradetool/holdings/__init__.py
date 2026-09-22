@@ -24,7 +24,14 @@ from tradetool.holdings.storage import (
 	save_holding_settings,
 	upsert_holding_transaction,
 )
-from tradetool.holdings.v1_import import V1HoldingsImportResult, dry_run_v1_holdings_import, import_v1_holdings
+from tradetool.holdings.v1_import import (
+	V1HoldingsImportResult,
+	V1HoldingsSettingsImportResult,
+	dry_run_v1_holdings_import,
+	dry_run_v1_holdings_settings_import,
+	import_v1_holdings,
+	import_v1_holdings_settings,
+)
 
 __all__ = [
 	'CanonicalTransaction',
@@ -33,6 +40,7 @@ __all__ = [
 	'HoldingTransaction',
 	'HoldingTransactionRecord',
 	'V1HoldingsImportResult',
+	'V1HoldingsSettingsImportResult',
 	'HoldingSignalEvaluation',
 	'HoldingSignalInputs',
 	'HoldingSignalRules',
@@ -45,7 +53,9 @@ __all__ = [
 	'evaluate_holding_signal',
 	'fallback_transaction_key',
 	'dry_run_v1_holdings_import',
+	'dry_run_v1_holdings_settings_import',
 	'import_v1_holdings',
+	'import_v1_holdings_settings',
 	'initialize_holdings_schema',
 	'load_holding_settings',
 	'load_holding_transactions',
