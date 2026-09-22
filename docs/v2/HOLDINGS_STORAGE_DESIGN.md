@@ -97,9 +97,13 @@ needed for H3b.
 | B. V2-native Holdings tables plus explicit V1 import adapter | Directly maps H2a source inputs and H2b typed settings while preserving selected audit fields. | Low coupling; one small, versioned V2 schema to maintain. | Simple rollback by disabling the adapter or using a fresh V2 DB; V1 remains read-only input only. |
 | C. Extend `price_history_v2` or `universe_cache` | Does not fit transaction or settings semantics. | Couples market data/cache to portfolio domain and obscures ownership. | Poor; no V1 benefit and no clean rollback boundary. |
 
-**RECOMMENDATION — REQUIRES USER APPROVAL:** Option B. It preserves the H1
-parity contract behind V2-native source-of-truth tables and an explicit,
-idempotent import boundary. It does not use V1 at normal V2 runtime.
+**APPROVED STORAGE STRATEGY:** Option B. V2 uses native Holdings persistence
+with an explicit, idempotent V1 import/compatibility adapter. V1 remains
+strictly read-only and is never a normal V2 runtime dependency. Source
+transactions are persisted; H2a/H2b continue to derive open positions, GAV,
+cost-basis status, signal action, and signal reasons. No derived position or
+signal table is allowed unless a future measured requirement explicitly
+justifies one.
 
 ## 5. Proposed H3b Contract
 
@@ -116,6 +120,7 @@ This is a proposed contract only. H3b must create no tables until approved.
 | `settlement_date` | `TEXT` nullable | H2a chronological order. |
 | `isin`, `ticker`, `instrument_name` | `TEXT` nullable | Instrument identity in H1 fallback order. |
 | `ticker_source` | `TEXT` nullable | Source audit only. |
+| `note` | `TEXT` nullable | Optional imported audit/user information. |
 | `transaction_type` | `TEXT NOT NULL` | H2a purchase/sale/transfer/cash-flow classification. |
 | `shares` | `REAL NOT NULL` | Source quantity. |
 | `price`, `amount`, `fee` | `REAL` nullable | Source accounting values. |
@@ -141,10 +146,12 @@ One typed global row with `settings_scope TEXT PRIMARY KEY` constrained to
 - `sell_fast_sma_days INTEGER NOT NULL`
 - `atr_multiplier REAL NOT NULL`
 - `rs_threshold REAL NOT NULL`
+- `norway_benchmark_id TEXT NOT NULL`
 
 Use explicit checks for allowed period labels, `rs_months` values, booleans,
 non-negative SMA days, and positive multiplier/threshold. Missing row fallback
 is the documented H1 code-default set. `period_key` is derived from the label.
+The missing-row fallback for `norway_benchmark_id` is `OSEBX.OL`.
 
 ## 6. V1 Import / Migration Approach
 
@@ -160,51 +167,52 @@ separate V2 Holdings database state or restoration from a pre-import V2 backup;
 V1 is never changed.
 
 V1 source transaction rows map directly to the proposed source and audit
-columns except `note`, `dagens_verdi`, and `pnl_nok`. These are not H2a/H2b
-inputs. **OPEN:** before import approval, decide whether they require an
-optional legacy-audit payload or are intentionally excluded as non-source
-current-value/history fields. No derived V1 position or signal values should be
-migrated.
+columns. `note` is preserved as optional imported audit/user information.
+`dagens_verdi` and `pnl_nok` are not source-of-truth V2 data and must be
+recalculated from current V2 data if later needed. Other legacy-only fields not
+required for H2a reconstruction are excluded unless a transaction-audit or
+traceability requirement explicitly justifies them. No derived V1 position or
+signal values should be migrated.
 
-## 7. Benchmark Options — OPEN USER DECISION
+## 7. Benchmark Configuration — Approved
 
-### A. Preserve V1 Holdings benchmark: `^OSEAX`
+Holdings benchmark selection is configuration, not signal-engine behavior. The
+V2 default benchmark for Norway is `OSEBX.OL`, persisted as
+`norway_benchmark_id` in the typed Holdings settings contract. H2b continues to
+receive benchmark-relative feature inputs explicitly; it does not choose or
+load a benchmark.
 
-Best signal-parity baseline for V1 behavior. It can diverge from V2 Screener
-benchmark context and requires V2 data-quality validation before use.
+`OSEBX.OL` aligns with the V2 `NORWAY_V2` market-data update configuration.
+It replaces V1 benchmark behavior for normal V2 runtime and therefore changes
+RS inputs relative to V1.
 
-### B. Use V2 Norwegian benchmark: `OSEBX.OL`
+`^OSEAX` may remain available only for explicit V1 parity or comparison tests
+when required. It is not a normal V2 runtime dependency and is not the default
+Norwegian Holdings benchmark.
 
-Aligns Holdings with the current `NORWAY_V2` market-data update configuration.
-It changes RS inputs and therefore can change H2b signal outcomes; parity tests
-must be extended with benchmark-aware feature fixtures before adoption.
-
-### C. Explicit Holdings/universe benchmark configuration
-
-Separates the benchmark from transaction storage and permits a documented V2
-default. It offers the clearest migration/testing contract, but the default
-must be chosen by the user after comparing `^OSEAX` and `OSEBX.OL` coverage and
-signal impact.
-
-**OPEN USER DECISION:** choose A, B, or C and, if C, approve the default. H3b
-must not implement or infer this choice.
+H3b benchmark tests must verify deterministic `OSEBX.OL` fallback and prove
+that alternate benchmark configuration remains outside the signal engine.
 
 ## 8. H3b Acceptance Criteria
 
-- User approves Option B, the schema contract, legacy-audit-field treatment,
-  and benchmark decision path.
+- Implements the approved Option B schema in an isolated Holdings persistence
+  boundary; V1 remains read-only and is never a normal V2 runtime dependency.
 - DDL is isolated from market-data schema initialization and covered by
   temporary-database schema tests.
 - Import dry-run and write paths are distinct; the write path is explicitly
   authorized and idempotent by both identity mechanisms.
+- Import preserves V1 `note`, excludes `dagens_verdi` and `pnl_nok` as
+  source-of-truth data, and excludes other legacy-only fields unless required
+  for transaction audit or traceability.
 - H2a reconstructs the H1 transaction cases solely from V2 transaction rows.
-- H2b receives typed settings and explicit benchmark/feature inputs without
-  database access or duplicated signal policy.
+- H2b receives typed settings, explicit benchmark/feature inputs, and the
+  deterministic Norway default `OSEBX.OL` without database access or duplicated
+  signal policy.
 - No derived position or signal rows are persisted.
 
 ## 9. Explicit Non-Goals
 
-H3a/H3b does not implement Streamlit, database writes, migration execution,
-market-data refresh, benchmark selection, daily reporting/email, settings UI,
-or new signal/accounting behavior. V1 remains a read-only, explicit import
-source and never a V2 runtime dependency.
+H3a does not implement Streamlit, database writes, migration execution,
+market-data refresh, daily reporting/email, settings UI, or new
+signal/accounting behavior. V1 remains a read-only, explicit import source and
+never a V2 runtime dependency.
