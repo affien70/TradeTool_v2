@@ -1,0 +1,105 @@
+{
+  "contract_version": "H1",
+  "source_is_synthetic": true,
+  "v1_reference_only": true,
+  "benchmark_migration": "OPEN DECISION: V1 uses ^OSEAX for Norwegian holdings; H1 does not choose a V2 benchmark.",
+  "cost_basis_statuses": ["known", "partially_unknown", "unknown"],
+  "transaction_identity": {
+    "broker_transaction_id_priority": "Nordnet transaction ID when present",
+    "fallback_key_fields": [
+      "trade_date",
+      "settlement_date",
+      "isin_or_ticker_or_instrument_name",
+      "transaction_type",
+      "normalized_shares",
+      "currency"
+    ],
+    "fallback_key_ignores": ["price", "amount"],
+    "duplicate_outcome": "update_or_deduplicate_to_one_stored_transaction"
+  },
+  "transaction_scenarios": [
+    {
+      "id": "normal_purchase",
+      "transactions": [{"type": "KJØPT", "shares": 10.0, "price": 100.0, "amount": 1000.0}],
+      "expected": {"open": true, "open_quantity": 10.0, "remaining_cost_basis": 1000.0, "gav": 100.0, "cost_basis_status": "known"}
+    },
+    {
+      "id": "multiple_purchases_same_ticker",
+      "transactions": [
+        {"type": "KJØPT", "shares": 10.0, "price": 100.0, "amount": 1000.0},
+        {"type": "KJØPT", "shares": 5.0, "price": 120.0, "amount": 600.0}
+      ],
+      "expected": {"open": true, "open_quantity": 15.0, "remaining_cost_basis": 1600.0, "gav": 106.6666666667, "cost_basis_status": "known"}
+    },
+    {
+      "id": "partial_sale",
+      "transactions": [
+        {"type": "KJØPT", "shares": 10.0, "price": 100.0, "amount": 1000.0},
+        {"type": "SALG", "shares": 4.0, "price": 120.0, "amount": 480.0}
+      ],
+      "expected": {"open": true, "open_quantity": 6.0, "remaining_cost_basis": 600.0, "gav": 100.0, "cost_basis_status": "known"}
+    },
+    {
+      "id": "complete_sale",
+      "transactions": [
+        {"type": "KJØPT", "shares": 10.0, "price": 100.0, "amount": 1000.0},
+        {"type": "SALG", "shares": 10.0, "price": 105.0, "amount": 1050.0}
+      ],
+      "expected": {"open": false, "open_quantity": 0.0, "remaining_cost_basis": 0.0, "gav": null, "cost_basis_status": null}
+    },
+    {
+      "id": "transferred_shares_unknown_cost",
+      "transactions": [{"type": "INNLEGG OVERFØRING", "shares": 80.0, "price": 0.0, "amount": 0.0}],
+      "expected": {"open": true, "open_quantity": 80.0, "remaining_cost_basis": 0.0, "gav": null, "cost_basis_status": "unknown"}
+    },
+    {
+      "id": "transferred_and_priced_shares_partial_cost",
+      "transactions": [
+        {"type": "INNLEGG OVERFØRING", "shares": 80.0, "price": 0.0, "amount": 0.0},
+        {"type": "KJØPT", "shares": 20.0, "price": 50.0, "amount": 1000.0}
+      ],
+      "expected": {"open": true, "open_quantity": 100.0, "priced_open_quantity": 20.0, "remaining_cost_basis": 1000.0, "gav": 50.0, "cost_basis_status": "partially_unknown"}
+    },
+    {
+      "id": "duplicate_nordnet_transaction_id",
+      "transactions": [
+        {"nordnet_transaction_id": "synthetic-1001", "type": "KJØPT", "shares": 10.0, "price": 100.0, "amount": 1000.0},
+        {"nordnet_transaction_id": "synthetic-1001", "type": "KJØPT", "shares": 10.0, "price": 101.5, "amount": 1015.0}
+      ],
+      "expected": {"stored_transaction_count": 1, "identity_method": "nordnet_transaction_id", "latest_price": 101.5, "latest_amount": 1015.0}
+    },
+    {
+      "id": "duplicate_fallback_transaction_key",
+      "transactions": [
+        {"nordnet_transaction_id": null, "trade_date": "2025-01-02", "settlement_date": "2025-01-06", "isin": "NO-SYNTH-01", "type": "KJØPT", "shares": 10.0, "currency": "NOK", "price": 100.0, "amount": 1000.0},
+        {"nordnet_transaction_id": null, "trade_date": "2025-01-02", "settlement_date": "2025-01-06", "isin": "NO-SYNTH-01", "type": "KJØPT", "shares": 10.0, "currency": "NOK", "price": 101.5, "amount": 1015.0}
+      ],
+      "expected": {"stored_transaction_count": 1, "identity_method": "fallback_transaction_key"}
+    },
+    {
+      "id": "dividend_and_fee_do_not_change_open_position",
+      "transactions": [
+        {"type": "KJØPT", "shares": 10.0, "price": 100.0, "amount": 1000.0},
+        {"type": "UTBYTTE", "shares": 0.0, "amount": 25.0},
+        {"type": "PLATTFORMAVGIFT", "shares": 0.0, "amount": -5.0}
+      ],
+      "expected": {"open": true, "open_quantity": 10.0, "remaining_cost_basis": 1000.0, "gav": 100.0, "cost_basis_status": "known", "reporting_cashflows": [{"type": "UTBYTTE", "amount": 25.0}, {"type": "PLATTFORMAVGIFT", "amount": -5.0}]}
+    }
+  ],
+  "signal_scenarios": [
+    {"id": "healthy_position", "inputs": {"below_fast_sma": false, "weak_rs": false, "below_cost_basis": false, "drop_from_peak": false, "below_long_sma": false, "short_term_return": 0.02, "fast_sma_slope_positive": true}, "expected": {"signal": "HOLD", "reasons": []}},
+    {"id": "isolated_fast_sma_breach", "inputs": {"below_fast_sma": true, "weak_rs": false, "below_cost_basis": false, "drop_from_peak": false, "short_term_return": 0.04, "momentum_acceleration": 0.01, "fast_sma_slope_positive": true}, "expected": {"signal": "FØLG MED", "reasons": ["Kurs under SMA100, men RS, momentum og SMA100-trend er fortsatt sterke."]}},
+    {"id": "fast_sma_with_weak_rs", "inputs": {"below_fast_sma": true, "weak_rs": true, "below_cost_basis": false, "drop_from_peak": false, "short_term_return": 0.02, "momentum_acceleration": 0.01, "fast_sma_slope_positive": true}, "expected": {"signal": "SELL", "reasons": ["Kurs under SMA100", "RS < 1.05"]}},
+    {"id": "fast_sma_with_negative_1m_momentum", "inputs": {"below_fast_sma": true, "weak_rs": false, "below_cost_basis": false, "drop_from_peak": false, "short_term_return": -0.01, "fast_sma_slope_positive": true}, "expected": {"signal": "SELL", "reasons": ["Kurs under SMA100", "1m momentum er negativt"]}},
+    {"id": "below_sma200", "inputs": {"below_fast_sma": false, "weak_rs": false, "below_cost_basis": false, "drop_from_peak": false, "below_long_sma": true, "short_term_return": 0.02, "fast_sma_slope_positive": true}, "expected": {"signal": "SELL", "reasons": ["Langsiktig trend brutt: kurs under SMA200"]}},
+    {"id": "cost_stop_at_ten_percent", "inputs": {"below_fast_sma": false, "weak_rs": false, "below_cost_basis": true, "drop_from_peak": false, "short_term_return": 0.02, "fast_sma_slope_positive": true}, "expected": {"signal": "SELL", "reasons": ["10% under kostpris"]}},
+    {"id": "isolated_atr_trailing_stop_breach", "inputs": {"below_fast_sma": false, "weak_rs": false, "below_cost_basis": false, "drop_from_peak": true, "short_term_return": 0.03, "momentum_acceleration": 0.01, "fast_sma_slope_positive": true}, "expected": {"signal": "FØLG MED", "reasons": ["ATR trailing stop brutt, men trend, RS og momentum er fortsatt sterke."]}},
+    {"id": "atr_breach_with_weak_rs", "inputs": {"below_fast_sma": false, "weak_rs": true, "below_cost_basis": false, "drop_from_peak": true, "short_term_return": 0.03, "fast_sma_slope_positive": true}, "expected": {"signal": "SELL", "reasons": ["ATR-stop brutt (2.5x ATR)", "RS < 1.05"]}},
+    {"id": "atr_breach_with_negative_1m_momentum", "inputs": {"below_fast_sma": false, "weak_rs": false, "below_cost_basis": false, "drop_from_peak": true, "short_term_return": -0.01, "fast_sma_slope_positive": true}, "expected": {"signal": "SELL", "reasons": ["ATR-stop brutt (2.5x ATR)", "1m momentum er negativt"]}}
+  ],
+  "settings": {
+    "code_defaults": {"period_label": "1 år", "period_key": "1y", "rs_months": 6, "holdings_sell_sma_days": 100, "sell_rs_weak": true, "sell_below_cost_basis": true, "sell_drop_from_peak": false, "holdings_atr_multiplier": 2.5, "sell_rs_threshold": 1.05},
+    "persisted_values": "Not verified from the current repository; V1 persisted settings were not read because H1 must not inspect a real portfolio database.",
+    "tested_override_example": {"period_label": "5 år", "period_key": "5y", "rs_months": 12, "holdings_sell_sma_days": 150, "sell_rs_weak": false, "sell_below_cost_basis": false, "sell_drop_from_peak": true, "holdings_atr_multiplier": 3.75}
+  }
+}
