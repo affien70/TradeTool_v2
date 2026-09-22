@@ -30,7 +30,14 @@ class ProjectStructureTests(unittest.TestCase):
         for relative_path in expected_paths:
             self.assertTrue((root / relative_path).exists(), relative_path)
 
-    def test_holdings_module_contains_no_implemented_signal_logic_yet(self) -> None:
+    def test_holdings_modules_stay_pure_without_runtime_integration(self) -> None:
         root = get_settings().project_root
-        text = (root / 'src/tradetool/holdings/__init__.py').read_text(encoding='utf-8')
-        self.assertIn('no signal logic is implemented yet', text)
+        holdings_paths = (
+            root / 'src/tradetool/holdings/core.py',
+            root / 'src/tradetool/holdings/signals.py',
+        )
+        for holdings_path in holdings_paths:
+            with self.subTest(holdings_path=holdings_path.name):
+                text = holdings_path.read_text(encoding='utf-8').lower()
+                self.assertNotIn('streamlit', text)
+                self.assertNotIn('sqlite', text)
