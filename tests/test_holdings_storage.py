@@ -129,6 +129,14 @@ class HoldingsStorageTests(unittest.TestCase):
         self.assertEqual(load_holding_settings(self.connection), settings)
         self.assertEqual(load_holding_settings(self.connection).period_key, '5y')
 
+    def test_settings_save_loads_after_reopen_with_normal_writable_connection(self) -> None:
+        settings = HoldingSettings(period_label='2 år', rs_months=3, sell_fast_sma_days=50)
+        with sqlite3.connect(self.db_path) as connection:
+            self.assertEqual(save_holding_settings(connection, settings), settings)
+
+        with sqlite3.connect(self.db_path) as reopened_connection:
+            self.assertEqual(load_holding_settings(reopened_connection), settings)
+
     def _record(self, **overrides: object) -> HoldingTransactionRecord:
         payload: dict[str, object] = {
             'transaction_type': 'KJØPT',

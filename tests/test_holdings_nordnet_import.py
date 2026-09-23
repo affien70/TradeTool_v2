@@ -5,6 +5,7 @@ import sqlite3
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from tradetool.holdings import (
     HoldingTransactionRecord,
@@ -16,6 +17,7 @@ from tradetool.holdings import (
     reconstruct_position,
     upsert_holding_transaction,
 )
+from tradetool.holdings.storage import upsert_holding_transaction as storage_upsert_holding_transaction
 
 
 HEADERS = (
@@ -276,6 +278,81 @@ class NordnetImportTests(unittest.TestCase):
         self.assertTrue(position.open)
         self.assertEqual(position.open_quantity, 6.0)
         self.assertEqual(position.remaining_cost_basis, 600.0)
+
+    def test_confirmed_import_accepts_normal_writable_sqlite_connection(self) -> None:
+        with sqlite3.connect(':memory:') as connection:
+            initialize_holdings_schema(connection)
+
+            result = import_nordnet_transactions(
+                _export([_row()]),
+                target_connection=connection,
+                confirmed=True,
+            )
+
+            self.assertEqual(result.written_row_count, 1)
+            self.assertEqual(len(load_holding_transactions(connection)), 1)
+
+    def test_confirmed_import_rolls_back_all_new_rows_after_mid_import_failure(self) -> None:
+        historical_export = _export([_row(Id='historical', Handelsdag='2025-01-01')])
+        attempted_export = _export([
+            _row(Id='new-1', Handelsdag='2025-01-02'),
+            _row(Id='new-2', Handelsdag='2025-01-03'),
+        ])
+        initialize_holdings_schema(self.connection)
+        import_nordnet_transactions(historical_export, target_connection=self.connection, confirmed=True)
+        before_failure = load_holding_transactions(self.connection)
+        write_attempts = 0
+
+        def fail_after_first_write(connection, record, *, commit=True):
+            nonlocal write_attempts
+            write_attempts += 1
+            if write_attempts == 2:
+                raise RuntimeError('synthetic mid-import failure')
+            return storage_upsert_holding_transaction(connection, record, commit=commit)
+
+        with patch(
+            'tradetool.holdings.nordnet_import.upsert_holding_transaction',
+            side_effect=fail_after_first_write,
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'synthetic mid-import failure'):
+                import_nordnet_transactions(attempted_export, target_connection=self.connection, confirmed=True)
+
+        after_failure = load_holding_transactions(self.connection)
+        self.assertEqual(after_failure, before_failure)
+        self.assertEqual(len(after_failure), 1)
+        self.assertEqual(after_failure[0].transaction.nordnet_transaction_id, 'historical')
+
+        successful_retry = import_nordnet_transactions(
+            attempted_export,
+            target_connection=self.connection,
+            confirmed=True,
+        )
+
+        self.assertEqual(successful_retry.written_row_count, 2)
+        self.assertEqual(
+            {record.transaction.nordnet_transaction_id for record in load_holding_transactions(self.connection)},
+            {'historical', 'new-1', 'new-2'},
+        )
+
+    def test_complete_export_recovers_from_single_preexisting_import_row(self) -> None:
+        complete_export = _export([
+            _row(Id='A', Handelsdag='2025-01-01'),
+            _row(Id='B', Handelsdag='2025-01-02'),
+            _row(Id='C', Handelsdag='2025-01-03'),
+        ])
+        first_row_only = _export([_row(Id='A', Handelsdag='2025-01-01')])
+        initialize_holdings_schema(self.connection)
+        import_nordnet_transactions(first_row_only, target_connection=self.connection, confirmed=True)
+
+        preview = dry_run_nordnet_import(complete_export, target_connection=self.connection)
+        recovered = import_nordnet_transactions(complete_export, target_connection=self.connection, confirmed=True)
+        records = load_holding_transactions(self.connection)
+
+        self.assertEqual(preview.existing_idempotent_count, 1)
+        self.assertEqual(preview.new_row_count, 2)
+        self.assertEqual(recovered.written_row_count, 2)
+        self.assertEqual({record.transaction.nordnet_transaction_id for record in records}, {'A', 'B', 'C'})
+        self.assertEqual(sum(record.transaction.nordnet_transaction_id == 'A' for record in records), 1)
 
     def test_invalid_rows_are_structured_and_block_confirmed_write(self) -> None:
         initialize_holdings_schema(self.connection)

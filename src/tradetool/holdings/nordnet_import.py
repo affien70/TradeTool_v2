@@ -380,11 +380,18 @@ def import_nordnet_transactions(
         return NordnetImportWriteResult(preview=preview, confirmed=True, written_row_count=0)
 
     written_rows = 0
-    for row in preview.rows:
-        if row.status not in {'new', 'update'}:
-            continue
-        upsert_holding_transaction(target_connection, row.record)
-        written_rows += 1
+    try:
+        target_connection.execute('BEGIN')
+        for row in preview.rows:
+            if row.status not in {'new', 'update'}:
+                continue
+            upsert_holding_transaction(target_connection, row.record, commit=False)
+            written_rows += 1
+    except Exception:
+        target_connection.rollback()
+        raise
+    else:
+        target_connection.commit()
     return NordnetImportWriteResult(preview=preview, confirmed=True, written_row_count=written_rows)
 
 

@@ -132,6 +132,7 @@ class HoldingSettings:
 
 def initialize_holdings_schema(connection: sqlite3.Connection) -> None:
     """Create Holdings tables only on an explicitly supplied writable connection."""
+    _configure_connection(connection)
     connection.execute(HOLDINGS_TRANSACTIONS_DDL)
     connection.execute(HOLDINGS_NORDNET_ID_INDEX_DDL)
     connection.execute(HOLDINGS_ORDER_INDEX_DDL)
@@ -142,7 +143,10 @@ def initialize_holdings_schema(connection: sqlite3.Connection) -> None:
 def upsert_holding_transaction(
     connection: sqlite3.Connection,
     record: HoldingTransactionRecord,
+    *,
+    commit: bool = True,
 ) -> HoldingTransactionRecord:
+    _configure_connection(connection)
     _require_table(connection, HOLDINGS_TRANSACTIONS_TABLE)
     transaction = record.transaction
     connection.execute(
@@ -175,11 +179,13 @@ def upsert_holding_transaction(
         """,
         _transaction_parameters(record),
     )
-    connection.commit()
+    if commit:
+        connection.commit()
     return _read_record_by_identity(connection, record)
 
 
 def load_holding_transactions(connection: sqlite3.Connection) -> tuple[HoldingTransactionRecord, ...]:
+    _configure_connection(connection)
     _require_table(connection, HOLDINGS_TRANSACTIONS_TABLE)
     rows = connection.execute(
         f"""
@@ -192,6 +198,7 @@ def load_holding_transactions(connection: sqlite3.Connection) -> tuple[HoldingTr
 
 
 def load_holding_settings(connection: sqlite3.Connection) -> HoldingSettings:
+    _configure_connection(connection)
     if not _table_exists(connection, HOLDINGS_SETTINGS_TABLE):
         return HoldingSettings()
     row = connection.execute(
@@ -213,6 +220,7 @@ def load_holding_settings(connection: sqlite3.Connection) -> HoldingSettings:
 
 
 def save_holding_settings(connection: sqlite3.Connection, settings: HoldingSettings) -> HoldingSettings:
+    _configure_connection(connection)
     _require_table(connection, HOLDINGS_SETTINGS_TABLE)
     connection.execute(
         f"""
@@ -322,6 +330,11 @@ def _record_from_row(row: sqlite3.Row | tuple[object, ...]) -> HoldingTransactio
 def _require_table(connection: sqlite3.Connection, table_name: str) -> None:
     if not _table_exists(connection, table_name):
         raise ValueError(f'Holdings schema is not initialized: {table_name}')
+
+
+def _configure_connection(connection: sqlite3.Connection) -> None:
+    """Use named SQLite rows for the Holdings persistence contract."""
+    connection.row_factory = sqlite3.Row
 
 
 def _table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
