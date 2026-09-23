@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from datetime import date
+import importlib.util
 from pathlib import Path
+import sys
+import tempfile
+import types
 import unittest
+from unittest.mock import Mock, patch
 
 from plotly.graph_objects import Figure
 
@@ -257,6 +262,238 @@ class HoldingsPresentationTests(unittest.TestCase):
         self.assertNotIn('holdings_relative_strength', source)
         self.assertNotIn('average_true_range', source)
         self.assertNotIn('compute_raw_features', source)
+
+
+class _UploadedFile:
+    def __init__(self, content: bytes) -> None:
+        self.content = content
+
+    def getvalue(self) -> bytes:
+        return self.content
+
+
+class _HoldingsPageStreamlitStub(types.ModuleType):
+    def __init__(self) -> None:
+        super().__init__('streamlit')
+        self.session_state: dict[str, object] = {}
+        self.pressed: set[str] = set()
+        self.widget_values: dict[str, object] = {}
+        self.uploaded_content: bytes | None = None
+        self.buttons: dict[str, bool] = {}
+        self.metrics: list[tuple[str, object]] = []
+        self.captions: list[str] = []
+        self.infos: list[str] = []
+        self.warnings: list[str] = []
+        self.errors: list[str] = []
+        self.successes: list[str] = []
+        self.reruns = 0
+
+    def title(self, value: str) -> None:
+        self.captions.append(value)
+
+    def subheader(self, value: str) -> None:
+        self.captions.append(value)
+
+    def caption(self, value: str) -> None:
+        self.captions.append(value)
+
+    def info(self, value: str) -> None:
+        self.infos.append(value)
+
+    def warning(self, value: str) -> None:
+        self.warnings.append(value)
+
+    def error(self, value: str) -> None:
+        self.errors.append(value)
+
+    def success(self, value: str) -> None:
+        self.successes.append(value)
+
+    def columns(self, count: int):
+        return [self] * count
+
+    def metric(self, label: str, value: object) -> None:
+        self.metrics.append((label, value))
+
+    def file_uploader(self, *args, **kwargs):
+        return None if self.uploaded_content is None else _UploadedFile(self.uploaded_content)
+
+    def button(self, label: str, *, key: str, disabled: bool = False) -> bool:
+        self.buttons[key] = disabled
+        return key in self.pressed and not disabled
+
+    def selectbox(self, label: str, options, index: int = 0, *, key: str):
+        return self.widget_values.get(key, options[index])
+
+    def number_input(self, label: str, *, value, key: str, **kwargs):
+        return self.widget_values.get(key, value)
+
+    def checkbox(self, label: str, *, value: bool, key: str) -> bool:
+        return bool(self.widget_values.get(key, value))
+
+    def dataframe(self, *args, **kwargs) -> None:
+        return None
+
+    def plotly_chart(self, *args, **kwargs) -> None:
+        return None
+
+    def rerun(self) -> None:
+        self.reruns += 1
+
+
+def _page_status(path: Path):
+    return types.SimpleNamespace(
+        configured_path=path,
+        exists=True,
+        readable=True,
+    )
+
+
+def _page_result(*, schema_ready: bool, settings: HoldingSettings | None = None):
+    return types.SimpleNamespace(
+        holdings_schema_ready=schema_ready,
+        settings=settings or HoldingSettings(),
+        rows=(),
+    )
+
+
+def _preview(*, blocking: bool = False, new: int = 1, existing: int = 2, updates: int = 1, ignored: int = 1):
+    return types.SimpleNamespace(
+        parse_result=types.SimpleNamespace(source_row_count=8),
+        new_row_count=new,
+        existing_idempotent_count=existing,
+        would_update_count=updates,
+        duplicate_upload_count=0,
+        ignored_non_holdings_cashflow_count=ignored,
+        ignored_administrative_count=0,
+        invalid_row_count=1 if blocking else 0,
+        unsupported_blocker_count=0,
+        conflict_count=0,
+        target_schema_ready=True,
+        has_blocking_errors=blocking,
+    )
+
+
+class HoldingsPageActionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.st = _HoldingsPageStreamlitStub()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.database_path = Path(self.temp_dir.name) / 'holdings_ui.sqlite'
+        self.database_path.touch()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _render(self, *, result, preview=None):
+        build_result = Mock(return_value=result)
+        dry_run = Mock(return_value=preview or _preview())
+        confirmed_import = Mock(return_value=types.SimpleNamespace(
+            written_row_count=2,
+            preview=preview or _preview(),
+        ))
+        initialize_schema = Mock()
+        save_settings = Mock()
+        holdings_module = types.ModuleType('tradetool.holdings')
+        holdings_module.HoldingSettings = HoldingSettings
+        holdings_module.build_holdings_page_result = build_result
+        holdings_module.dry_run_nordnet_import = dry_run
+        holdings_module.import_nordnet_transactions = confirmed_import
+        holdings_module.initialize_holdings_schema = initialize_schema
+        holdings_module.save_holding_settings = save_settings
+        runtime_module = types.ModuleType('tradetool.config.runtime_settings')
+        runtime_module.inspect_app_database = lambda: _page_status(self.database_path)
+        ui_module = types.ModuleType('tradetool.ui.holdings')
+        ui_module.build_holding_chart_figure = lambda detail: None
+        ui_module.build_holdings_detail_display = lambda detail: detail
+        ui_module.build_holdings_summary_display = lambda page_result: page_result
+        ui_module.build_holdings_table_rows = lambda page_result: []
+        ui_module.holding_position_options = lambda page_result: ()
+        ui_module.page_state_message = lambda page_result: 'Ingen åpne beholdninger å vise.'
+        with patch.dict(sys.modules, {
+            'streamlit': self.st,
+            'tradetool.holdings': holdings_module,
+            'tradetool.config.runtime_settings': runtime_module,
+            'tradetool.ui.holdings': ui_module,
+        }):
+            path = Path('pages/beholdning.py').resolve()
+            spec = importlib.util.spec_from_file_location('pages.beholdning_test_import', path)
+            module = importlib.util.module_from_spec(spec)
+            assert spec is not None and spec.loader is not None
+            spec.loader.exec_module(module)
+        return build_result, dry_run, confirmed_import, initialize_schema, save_settings
+
+    def test_missing_schema_shows_onboarding_without_initializing(self) -> None:
+        _, dry_run, confirmed_import, initialize_schema, save_settings = self._render(
+            result=_page_result(schema_ready=False),
+        )
+
+        self.assertTrue(any('ikke klargjort' in message for message in self.st.infos))
+        self.assertFalse(self.st.buttons['holdings_initialize_schema'])
+        initialize_schema.assert_not_called()
+        dry_run.assert_not_called()
+        confirmed_import.assert_not_called()
+        save_settings.assert_not_called()
+
+    def test_schema_initialization_requires_the_explicit_action(self) -> None:
+        self.st.pressed.add('holdings_initialize_schema')
+        _, _, _, initialize_schema, _ = self._render(result=_page_result(schema_ready=False))
+
+        initialize_schema.assert_called_once()
+        self.assertEqual(self.st.reruns, 1)
+
+    def test_uploader_passes_raw_bytes_to_dry_run_and_does_not_write_before_confirmation(self) -> None:
+        self.st.uploaded_content = b'synthetic nordnet upload'
+        _, dry_run, confirmed_import, _, _ = self._render(result=_page_result(schema_ready=True))
+
+        self.assertEqual(dry_run.call_args.args[0], b'synthetic nordnet upload')
+        self.assertIn(('Nye transaksjoner', 1), self.st.metrics)
+        self.assertIn(('Allerede registrert', 2), self.st.metrics)
+        self.assertIn(('Oppdateres', 1), self.st.metrics)
+        self.assertIn(('Ignorerte kontantbevegelser', 1), self.st.metrics)
+        self.assertFalse(self.st.buttons['holdings_confirm_nordnet_import'])
+        confirmed_import.assert_not_called()
+
+    def test_blocking_preview_disables_confirmed_import(self) -> None:
+        self.st.uploaded_content = b'blocked upload'
+        self.st.pressed.add('holdings_confirm_nordnet_import')
+        _, _, confirmed_import, _, _ = self._render(
+            result=_page_result(schema_ready=True),
+            preview=_preview(blocking=True),
+        )
+
+        self.assertTrue(self.st.buttons['holdings_confirm_nordnet_import'])
+        self.assertTrue(any('blokkert' in message for message in self.st.warnings))
+        confirmed_import.assert_not_called()
+
+    def test_ignored_rows_do_not_block_explicit_confirmed_import(self) -> None:
+        self.st.uploaded_content = b'ignored rows upload'
+        self.st.pressed.add('holdings_confirm_nordnet_import')
+        preview = _preview(new=1, existing=0, updates=0, ignored=3)
+        _, _, confirmed_import, _, _ = self._render(result=_page_result(schema_ready=True), preview=preview)
+
+        self.assertFalse(self.st.buttons['holdings_confirm_nordnet_import'])
+        self.assertEqual(confirmed_import.call_args.args[0], b'ignored rows upload')
+        self.assertTrue(confirmed_import.call_args.kwargs['confirmed'])
+        self.assertEqual(self.st.reruns, 1)
+
+    def test_settings_use_typed_contract_and_osebx_default(self) -> None:
+        self.st.pressed.add('holdings_save_settings')
+        self.st.widget_values['holdings_sell_fast_sma_days'] = 50
+        _, _, _, _, save_settings = self._render(result=_page_result(schema_ready=True, settings=HoldingSettings()))
+
+        saved = save_settings.call_args.args[1]
+        self.assertIsInstance(saved, HoldingSettings)
+        self.assertEqual(saved.sell_fast_sma_days, 50)
+        self.assertEqual(saved.norway_benchmark_id, 'OSEBX.OL')
+        self.assertIn('Benchmark: OSEBX.OL', self.st.captions)
+        self.assertEqual(self.st.reruns, 1)
+
+    def test_ui_module_contains_no_sql_or_nordnet_business_mapping(self) -> None:
+        source = Path('src/tradetool/ui/holdings.py').read_text(encoding='utf-8')
+        self.assertNotIn('.execute(', source)
+        self.assertNotIn('parse_nordnet_export', source)
+        self.assertNotIn('import_nordnet_transactions', source)
+        self.assertNotIn('_MAPPED_TRANSACTION_TYPES', source)
 
 
 if __name__ == '__main__':
