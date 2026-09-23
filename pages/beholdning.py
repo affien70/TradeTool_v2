@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 
 import streamlit as st
@@ -53,108 +54,94 @@ def _render_schema_onboarding(database_status) -> None:
             st.rerun()
 
 
-def _render_import_preview(preview) -> None:
-    st.caption('Forhåndsvisning fra importmotoren. Ingen transaksjoner er skrevet.')
-    first_row = st.columns(5)
-    first_row[0].metric('Kilderader', preview.parse_result.source_row_count)
-    first_row[1].metric('Nye transaksjoner', preview.new_row_count)
-    first_row[2].metric('Allerede registrert', preview.existing_idempotent_count)
-    first_row[3].metric('Oppdateres', preview.would_update_count)
-    first_row[4].metric('Duplikater i fil', preview.duplicate_upload_count)
-    second_row = st.columns(5)
-    second_row[0].metric('Ignorerte kontantbevegelser', preview.ignored_non_holdings_cashflow_count)
-    second_row[1].metric('Ignorerte administrative', preview.ignored_administrative_count)
-    second_row[2].metric('Ugyldige rader', preview.invalid_row_count)
-    second_row[3].metric('Ikke støttede rader', preview.unsupported_blocker_count)
-    second_row[4].metric('Konflikter', preview.conflict_count)
-
-
-def _render_import_receipt() -> None:
-    receipt = st.session_state.pop('holdings_import_receipt', None)
-    if receipt is None:
-        return
-    st.success(
-        f'Import fullført: {receipt["written"]} skrevet, {receipt["updated"]} oppdatert, '
-        f'{receipt["existing"]} allerede registrert, {receipt["ignored"]} ignorert.'
-    )
-
-
 def _render_nordnet_import(database_status) -> None:
-    st.subheader('Importer Nordnet-transaksjoner')
-    _render_import_receipt()
-    uploaded_file = st.file_uploader(
-        'Last opp Nordnet-transaksjonseksport',
+    import_column, _ = st.columns((2, 3))
+    import_column.caption('Nordnet-import')
+    uploaded_file = import_column.file_uploader(
+        'Last opp Nordnet-fil',
         type=('csv', 'txt'),
         key='holdings_nordnet_upload',
     )
     if uploaded_file is None:
-        st.caption('Last opp en Nordnet-fil for å se en forhåndsvisning før import.')
+        return
+    content = uploaded_file.getvalue()
+    fingerprint = hashlib.sha256(content).hexdigest()
+    processed_imports = st.session_state.setdefault('holdings_processed_imports', {})
+    prior_message = processed_imports.get(fingerprint)
+    if prior_message is not None:
+        _render_import_message(*prior_message)
         return
     try:
-        content = uploaded_file.getvalue()
         with sqlite3.connect(f'file:{database_status.configured_path}?mode=ro', uri=True) as connection:
             connection.row_factory = sqlite3.Row
             preview = dry_run_nordnet_import(content, target_connection=connection)
     except (OSError, sqlite3.Error, ValueError):
-        st.error('Kunne ikke kontrollere Nordnet-filen.')
+        processed_imports[fingerprint] = ('error', 'Kunne ikke kontrollere Nordnet-filen.')
+        _render_import_message(*processed_imports[fingerprint])
         return
-
-    _render_import_preview(preview)
-    meaningful_write = preview.new_row_count + preview.would_update_count > 0
-    can_import = preview.target_schema_ready and not preview.has_blocking_errors and meaningful_write
     if preview.has_blocking_errors:
-        st.warning('Import er blokkert fordi filen inneholder ugyldige, ikke støttede eller konfliktfylte rader.')
-    elif not meaningful_write:
-        st.info('Filen inneholder ingen nye eller oppdaterte beholdningstransaksjoner.')
-    if st.button('Importer transaksjoner', disabled=not can_import, key='holdings_confirm_nordnet_import'):
-        try:
-            with sqlite3.connect(database_status.configured_path) as connection:
-                result = import_nordnet_transactions(content, target_connection=connection, confirmed=True)
-        except (OSError, sqlite3.Error, ValueError):
-            st.error('Kunne ikke importere Nordnet-transaksjonene.')
-            return
-        st.session_state['holdings_import_receipt'] = {
-            'written': result.written_row_count,
-            'updated': result.preview.would_update_count,
-            'existing': result.preview.existing_idempotent_count,
-            'ignored': (
-                result.preview.ignored_non_holdings_cashflow_count
-                + result.preview.ignored_administrative_count
-            ),
-        }
-        st.rerun()
+        processed_imports[fingerprint] = (
+            'error',
+            'Import stoppet: filen inneholder ugyldige, ikke støttede eller konfliktfylte rader.',
+        )
+        _render_import_message(*processed_imports[fingerprint])
+        return
+    try:
+        with sqlite3.connect(database_status.configured_path) as connection:
+            result = import_nordnet_transactions(content, target_connection=connection, confirmed=True)
+    except (OSError, sqlite3.Error, ValueError):
+        processed_imports[fingerprint] = ('error', 'Kunne ikke importere Nordnet-transaksjonene.')
+        _render_import_message(*processed_imports[fingerprint])
+        return
+    receipt = result.preview
+    processed_imports[fingerprint] = (
+        'success',
+        f'Importert: {receipt.new_row_count} nye, {receipt.would_update_count} oppdatert, '
+        f'{receipt.existing_idempotent_count} allerede registrert.',
+    )
+    _render_import_message(*processed_imports[fingerprint])
+    st.rerun()
+
+
+def _render_import_message(level: str, message: str) -> None:
+    if level == 'success':
+        st.success(message)
+    else:
+        st.error(message)
 
 
 def _render_holdings_settings(database_status, settings: HoldingSettings) -> None:
-    st.subheader('Beholdningsinnstillinger')
-    st.caption(f'Benchmark: {settings.norway_benchmark_id}')
-    period_label = st.selectbox(
+    sidebar = st.sidebar
+    sidebar.subheader('Beholdningsinnstillinger')
+    sidebar.caption(f'Benchmark: {settings.norway_benchmark_id}')
+    period_column, rs_column = sidebar.columns(2)
+    period_label = period_column.selectbox(
         'Analyseperiode',
         options=('1 år', '2 år', '5 år'),
         index=('1 år', '2 år', '5 år').index(settings.period_label),
         key='holdings_period_label',
     )
-    rs_months = st.selectbox(
+    rs_months = rs_column.selectbox(
         'RS-periode',
         options=(3, 6, 12),
         index=(3, 6, 12).index(settings.rs_months),
         key='holdings_rs_months',
     )
-    sell_fast_sma_days = st.number_input(
-        'Rask SMA for salg',
+    sell_fast_sma_days = sidebar.number_input(
+        'SMA for SELL',
         min_value=0,
         step=1,
         value=settings.sell_fast_sma_days,
         key='holdings_sell_fast_sma_days',
     )
-    sell_rs_weak = st.checkbox('Bruk svak RS i salgssignal', value=settings.sell_rs_weak, key='holdings_sell_rs_weak')
-    sell_below_cost_basis = st.checkbox(
-        'Bruk kostpris-stopp',
+    sell_rs_weak = sidebar.checkbox('Svak RS', value=settings.sell_rs_weak, key='holdings_sell_rs_weak')
+    sell_below_cost_basis = sidebar.checkbox(
+        'Kostpris-stopp',
         value=settings.sell_below_cost_basis,
         key='holdings_sell_below_cost_basis',
     )
-    sell_drop_from_peak = st.checkbox(
-        'Bruk ATR-trailing-stopp',
+    sell_drop_from_peak = sidebar.checkbox(
+        'ATR trailing-stopp',
         value=settings.sell_drop_from_peak,
         key='holdings_sell_drop_from_peak',
     )
@@ -169,7 +156,7 @@ def _render_holdings_settings(database_status, settings: HoldingSettings) -> Non
         rs_threshold=settings.rs_threshold,
         norway_benchmark_id=settings.norway_benchmark_id,
     )
-    if st.button('Lagre innstillinger', key='holdings_save_settings'):
+    if sidebar.button('Lagre innstillinger', key='holdings_save_settings'):
         try:
             with sqlite3.connect(database_status.configured_path) as connection:
                 save_holding_settings(connection, updated_settings)
@@ -272,15 +259,17 @@ def render() -> None:
         return
 
     if result.rows:
+        _render_holdings_settings(database_status, result.settings)
+        _render_nordnet_import(database_status)
         _render_summary(result)
         _render_active_holdings(result)
         _render_selected_position(result)
     else:
+        _render_holdings_settings(database_status, result.settings)
+        _render_nordnet_import(database_status)
         state_message = page_state_message(result)
         if state_message:
             st.info(state_message)
-    _render_nordnet_import(database_status)
-    _render_holdings_settings(database_status, result.settings)
 
 
 render()

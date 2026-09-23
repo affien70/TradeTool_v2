@@ -275,6 +275,8 @@ class _UploadedFile:
 class _HoldingsPageStreamlitStub(types.ModuleType):
     def __init__(self) -> None:
         super().__init__('streamlit')
+        self.sidebar = _SidebarStub(self)
+        self.column_config = types.SimpleNamespace(TextColumn=lambda *args, **kwargs: None)
         self.session_state: dict[str, object] = {}
         self.pressed: set[str] = set()
         self.widget_values: dict[str, object] = {}
@@ -286,6 +288,8 @@ class _HoldingsPageStreamlitStub(types.ModuleType):
         self.warnings: list[str] = []
         self.errors: list[str] = []
         self.successes: list[str] = []
+        self.dataframes: list[object] = []
+        self.plotly_figures: list[object] = []
         self.reruns = 0
 
     def title(self, value: str) -> None:
@@ -309,8 +313,8 @@ class _HoldingsPageStreamlitStub(types.ModuleType):
     def success(self, value: str) -> None:
         self.successes.append(value)
 
-    def columns(self, count: int):
-        return [self] * count
+    def columns(self, count):
+        return [self] * (count if isinstance(count, int) else len(count))
 
     def metric(self, label: str, value: object) -> None:
         self.metrics.append((label, value))
@@ -322,7 +326,7 @@ class _HoldingsPageStreamlitStub(types.ModuleType):
         self.buttons[key] = disabled
         return key in self.pressed and not disabled
 
-    def selectbox(self, label: str, options, index: int = 0, *, key: str):
+    def selectbox(self, label: str, options, index: int = 0, *, key: str, **kwargs):
         return self.widget_values.get(key, options[index])
 
     def number_input(self, label: str, *, value, key: str, **kwargs):
@@ -332,13 +336,44 @@ class _HoldingsPageStreamlitStub(types.ModuleType):
         return bool(self.widget_values.get(key, value))
 
     def dataframe(self, *args, **kwargs) -> None:
-        return None
+        self.dataframes.append(args[0])
 
     def plotly_chart(self, *args, **kwargs) -> None:
-        return None
+        self.plotly_figures.append(args[0])
+
+    def markdown(self, value: str) -> None:
+        self.captions.append(value)
 
     def rerun(self) -> None:
         self.reruns += 1
+
+
+class _SidebarStub:
+    def __init__(self, parent: _HoldingsPageStreamlitStub) -> None:
+        self.parent = parent
+        self.captions: list[str] = []
+        self.subheaders: list[str] = []
+
+    def subheader(self, value: str) -> None:
+        self.subheaders.append(value)
+
+    def caption(self, value: str) -> None:
+        self.captions.append(value)
+
+    def columns(self, count):
+        return [self] * (count if isinstance(count, int) else len(count))
+
+    def selectbox(self, *args, **kwargs):
+        return self.parent.selectbox(*args, **kwargs)
+
+    def number_input(self, *args, **kwargs):
+        return self.parent.number_input(*args, **kwargs)
+
+    def checkbox(self, *args, **kwargs):
+        return self.parent.checkbox(*args, **kwargs)
+
+    def button(self, *args, **kwargs):
+        return self.parent.button(*args, **kwargs)
 
 
 def _page_status(path: Path):
@@ -349,11 +384,12 @@ def _page_status(path: Path):
     )
 
 
-def _page_result(*, schema_ready: bool, settings: HoldingSettings | None = None):
+def _page_result(*, schema_ready: bool, settings: HoldingSettings | None = None, rows=(), detail=None):
     return types.SimpleNamespace(
         holdings_schema_ready=schema_ready,
         settings=settings or HoldingSettings(),
-        rows=(),
+        rows=rows,
+        detail_for=lambda position_key: detail,
     )
 
 
@@ -384,10 +420,10 @@ class HoldingsPageActionTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def _render(self, *, result, preview=None):
+    def _render(self, *, result, preview=None, dry_run=None, confirmed_import=None):
         build_result = Mock(return_value=result)
-        dry_run = Mock(return_value=preview or _preview())
-        confirmed_import = Mock(return_value=types.SimpleNamespace(
+        dry_run = dry_run or Mock(return_value=preview or _preview())
+        confirmed_import = confirmed_import or Mock(return_value=types.SimpleNamespace(
             written_row_count=2,
             preview=preview or _preview(),
         ))
@@ -403,11 +439,17 @@ class HoldingsPageActionTests(unittest.TestCase):
         runtime_module = types.ModuleType('tradetool.config.runtime_settings')
         runtime_module.inspect_app_database = lambda: _page_status(self.database_path)
         ui_module = types.ModuleType('tradetool.ui.holdings')
-        ui_module.build_holding_chart_figure = lambda detail: None
+        ui_module.build_holding_chart_figure = lambda detail: object()
         ui_module.build_holdings_detail_display = lambda detail: detail
-        ui_module.build_holdings_summary_display = lambda page_result: page_result
-        ui_module.build_holdings_table_rows = lambda page_result: []
-        ui_module.holding_position_options = lambda page_result: ()
+        ui_module.build_holdings_summary_display = lambda page_result: types.SimpleNamespace(
+            open_position_count='1',
+            total_current_market_value='1 000 kr',
+            known_unrealized_pnl='100 kr',
+            signal_counts='HOLD: 1',
+            cost_basis_notice=None,
+        )
+        ui_module.build_holdings_table_rows = lambda page_result: [{'Instrument': 'Synthetic Holding'}]
+        ui_module.holding_position_options = lambda page_result: (('synthetic', 'Synthetic Holding'),)
         ui_module.page_state_message = lambda page_result: 'Ingen åpne beholdninger å vise.'
         with patch.dict(sys.modules, {
             'streamlit': self.st,
@@ -441,37 +483,44 @@ class HoldingsPageActionTests(unittest.TestCase):
         initialize_schema.assert_called_once()
         self.assertEqual(self.st.reruns, 1)
 
-    def test_uploader_passes_raw_bytes_to_dry_run_and_does_not_write_before_confirmation(self) -> None:
+    def test_valid_upload_uses_dry_run_then_imports_once_with_concise_receipt(self) -> None:
         self.st.uploaded_content = b'synthetic nordnet upload'
         _, dry_run, confirmed_import, _, _ = self._render(result=_page_result(schema_ready=True))
 
         self.assertEqual(dry_run.call_args.args[0], b'synthetic nordnet upload')
-        self.assertIn(('Nye transaksjoner', 1), self.st.metrics)
-        self.assertIn(('Allerede registrert', 2), self.st.metrics)
-        self.assertIn(('Oppdateres', 1), self.st.metrics)
-        self.assertIn(('Ignorerte kontantbevegelser', 1), self.st.metrics)
-        self.assertFalse(self.st.buttons['holdings_confirm_nordnet_import'])
-        confirmed_import.assert_not_called()
+        self.assertEqual(confirmed_import.call_args.args[0], b'synthetic nordnet upload')
+        self.assertTrue(confirmed_import.call_args.kwargs['confirmed'])
+        self.assertTrue(any(message.startswith('Importert: 1 nye, 1 oppdatert, 2 allerede registrert.') for message in self.st.successes))
+        self.assertNotIn('holdings_confirm_nordnet_import', self.st.buttons)
+        self.assertEqual(self.st.reruns, 1)
 
-    def test_blocking_preview_disables_confirmed_import(self) -> None:
+    def test_same_upload_does_not_reimport_on_rerun_but_new_upload_does(self) -> None:
+        dry_run = Mock(return_value=_preview())
+        confirmed_import = Mock(return_value=types.SimpleNamespace(written_row_count=2, preview=_preview()))
+        self.st.uploaded_content = b'first upload'
+        self._render(result=_page_result(schema_ready=True), dry_run=dry_run, confirmed_import=confirmed_import)
+        self._render(result=_page_result(schema_ready=True), dry_run=dry_run, confirmed_import=confirmed_import)
+        self.st.uploaded_content = b'replaced upload'
+        self._render(result=_page_result(schema_ready=True), dry_run=dry_run, confirmed_import=confirmed_import)
+
+        self.assertEqual(dry_run.call_count, 2)
+        self.assertEqual(confirmed_import.call_count, 2)
+
+    def test_blocking_preview_performs_zero_writes_with_concise_error(self) -> None:
         self.st.uploaded_content = b'blocked upload'
-        self.st.pressed.add('holdings_confirm_nordnet_import')
         _, _, confirmed_import, _, _ = self._render(
             result=_page_result(schema_ready=True),
             preview=_preview(blocking=True),
         )
 
-        self.assertTrue(self.st.buttons['holdings_confirm_nordnet_import'])
-        self.assertTrue(any('blokkert' in message for message in self.st.warnings))
+        self.assertTrue(any(message.startswith('Import stoppet:') for message in self.st.errors))
         confirmed_import.assert_not_called()
 
-    def test_ignored_rows_do_not_block_explicit_confirmed_import(self) -> None:
+    def test_ignored_rows_do_not_block_automatic_import(self) -> None:
         self.st.uploaded_content = b'ignored rows upload'
-        self.st.pressed.add('holdings_confirm_nordnet_import')
         preview = _preview(new=1, existing=0, updates=0, ignored=3)
         _, _, confirmed_import, _, _ = self._render(result=_page_result(schema_ready=True), preview=preview)
 
-        self.assertFalse(self.st.buttons['holdings_confirm_nordnet_import'])
         self.assertEqual(confirmed_import.call_args.args[0], b'ignored rows upload')
         self.assertTrue(confirmed_import.call_args.kwargs['confirmed'])
         self.assertEqual(self.st.reruns, 1)
@@ -485,8 +534,39 @@ class HoldingsPageActionTests(unittest.TestCase):
         self.assertIsInstance(saved, HoldingSettings)
         self.assertEqual(saved.sell_fast_sma_days, 50)
         self.assertEqual(saved.norway_benchmark_id, 'OSEBX.OL')
-        self.assertIn('Benchmark: OSEBX.OL', self.st.captions)
+        self.assertIn('Beholdningsinnstillinger', self.st.sidebar.subheaders)
+        self.assertIn('Benchmark: OSEBX.OL', self.st.sidebar.captions)
         self.assertEqual(self.st.reruns, 1)
+
+    def test_main_surface_keeps_table_selected_detail_and_plotly_chart(self) -> None:
+        detail = types.SimpleNamespace(
+            position_key='synthetic',
+            label='Synthetic Holding',
+            ticker='SYNTH.OL',
+            cost_basis_status='Kjent',
+            market_data_as_of_date='21.09.2026',
+            quantity='10',
+            gav='100 kr',
+            current_price='110 kr',
+            current_market_value='1 100 kr',
+            unrealized_pnl_nok='100 kr',
+            unrealized_pnl_pct='10%',
+            signal='HOLD',
+            relative_strength='1,100',
+            short_term_return='2%',
+            atr=None,
+            post_entry_peak=None,
+            trailing_stop=None,
+            reasons=(),
+            chart_unavailable_reasons=(),
+        )
+
+        self._render(result=_page_result(schema_ready=True, rows=(object(),), detail=detail))
+
+        self.assertTrue(self.st.dataframes)
+        self.assertTrue(self.st.plotly_figures)
+        self.assertIn('Aktive beholdninger', self.st.captions)
+        self.assertIn('Synthetic Holding', self.st.captions)
 
     def test_ui_module_contains_no_sql_or_nordnet_business_mapping(self) -> None:
         source = Path('src/tradetool/ui/holdings.py').read_text(encoding='utf-8')
@@ -494,6 +574,13 @@ class HoldingsPageActionTests(unittest.TestCase):
         self.assertNotIn('parse_nordnet_export', source)
         self.assertNotIn('import_nordnet_transactions', source)
         self.assertNotIn('_MAPPED_TRANSACTION_TYPES', source)
+
+    def test_page_has_no_nordnet_parser_preview_dashboard_or_confirmation_button(self) -> None:
+        source = Path('pages/beholdning.py').read_text(encoding='utf-8')
+        self.assertNotIn('parse_nordnet_export', source)
+        self.assertNotIn('_render_import_preview', source)
+        self.assertNotIn('holdings_confirm_nordnet_import', source)
+        self.assertNotIn('.execute(', source)
 
 
 if __name__ == '__main__':
